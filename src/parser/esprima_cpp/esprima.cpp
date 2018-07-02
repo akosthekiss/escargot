@@ -66,9 +66,11 @@ enum Token {
     TemplateToken = 10
 };
 
+/*
 enum PlaceHolders {
     ArrowParameterPlaceHolder
 };
+*/
 
 enum PunctuatorsKind {
     LeftParenthesis,
@@ -1309,7 +1311,7 @@ public:
         }
 
         return code;
-    };
+    }
 
     StringView getIdentifier()
     {
@@ -2485,6 +2487,7 @@ struct Context : public gc {
     bool inIteration : 1;
     bool inSwitch : 1;
     bool inCatch : 1;
+    bool inArrowFunction : 1;
     bool inDirectCatchScope : 1;
     bool inWith : 1;
     bool inLoop : 1;
@@ -2507,10 +2510,12 @@ struct MetaNode : public gc {
 };
 
 
+/*
 struct ArrowParameterPlaceHolderNode : public gc {
     String* type;
     ExpressionNodeVector params;
 };
+*/
 
 struct DeclarationOptions : public gc {
     bool inFor;
@@ -2525,11 +2530,14 @@ public:
     ErrorHandler* errorHandler;
     Scanner* scanner;
     Scanner scannerInstance;
+    
     /*
     std::unordered_map<IdentifierNode*, RefPtr<ScannerResult>,
                        std::hash<IdentifierNode*>, std::equal_to<IdentifierNode*>, GCUtil::gc_malloc_ignore_off_page_allocator<std::pair<IdentifierNode*, RefPtr<ScannerResult>>>>
         nodeExtraInfo;
-     */
+        */
+        
+
     enum SourceType {
         Script,
         Module
@@ -2652,6 +2660,7 @@ public:
         this->context->inIteration = false;
         this->context->inSwitch = false;
         this->context->inCatch = false;
+        this->context->inArrowFunction = false;
         this->context->inDirectCatchScope = false;
         this->context->inWith = false;
         this->context->inLoop = false;
@@ -3162,7 +3171,7 @@ public:
         } else {
             ret = new IdentifierNode(AtomicString(this->escargotContext, SourceStringView(token->valueStringLiteral())));
         }
-        // nodeExtraInfo.insert(std::make_pair(ret, token));
+        //nodeExtraInfo.insert(std::make_pair(ret, token));
         if (trackUsingNames)
             scopeContexts.back()->insertUsingName(ret->name());
         return ret;
@@ -3289,6 +3298,9 @@ public:
                 if (this->matchKeyword(KeywordKind::Function)) {
                     expr = this->parseFunctionExpression();
                 } else if (this->matchKeyword(KeywordKind::This)) {
+                    if (this->context->inArrowFunction) {
+                        scopeContexts.back()->insertUsingName(this->escargotContext->staticStrings().stringThis);
+                    }
                     this->nextToken();
                     expr = this->finalize(node, new ThisExpressionNode());
                 } else if (this->matchKeyword(KeywordKind::Class)) {
@@ -3442,12 +3454,19 @@ public:
         RefPtr<ScannerResult> stricted;
         RefPtr<ScannerResult> firstRestricted;
         const char* message;
+        bool valid;
+
+        ParseFormalParametersResult()
+            : valid(false)
+        {
+        }
         ParseFormalParametersResult(PatternNodeVector params, RefPtr<ScannerResult> stricted, RefPtr<ScannerResult> firstRestricted, const char* message)
         {
             this->params = std::move(params);
             this->stricted = stricted;
             this->firstRestricted = firstRestricted;
             this->message = nullptr;
+            this->valid = true;
         }
     };
 
@@ -3519,6 +3538,9 @@ public:
 
     RefPtr<Node> parsePropertyMethod(ParseFormalParametersResult& params)
     {
+        bool previousInArrowFunction = this->context->inArrowFunction;
+
+        this->context->inArrowFunction = false;
         this->context->isAssignmentTarget = false;
         this->context->isBindingElement = false;
 
@@ -3533,6 +3555,7 @@ public:
             this->tolerateUnexpectedToken(params.stricted, params.message);
         }
         this->context->strict = previousStrict;
+        this->context->inArrowFunction = previousInArrowFunction;
 
         return body;
     }
@@ -4006,10 +4029,17 @@ public:
 
         this->expect(LeftParenthesis);
         if (this->match(RightParenthesis)) {
-            this->throwError("Arrow function is not supported yet");
-            RELEASE_ASSERT_NOT_REACHED();
+            this->nextToken();
+            if (!this->match(Arrow)) {
+                this->expect(Arrow);
+            }
+
+            //TODO
+            expr = this->finalize(this->startNode(this->lookahead), new ArrowParameterPlaceHolderNode());
         } else {
             RefPtr<ScannerResult> startToken = this->lookahead;
+
+            bool arrow = false;
             this->context->isBindingElement = true;
             expr = this->inheritCoverGrammar(&Parser::parseAssignmentExpression);
 
@@ -4026,10 +4056,53 @@ public:
 
                     expressions.push_back(this->inheritCoverGrammar(&Parser::parseAssignmentExpression));
                 }
-                expr = this->finalize(this->startNode(startToken), new SequenceExpressionNode(std::move(expressions)));
+                if (!arrow) {
+                    expr = this->finalize(this->startNode(startToken), new SequenceExpressionNode(std::move(expressions)));
+                }
+            }
+
+            if (!arrow) {
+                this->expect(RightParenthesis);
+                if (this->match(Arrow)) {
+                    if (expr->type() == Identifier && expr->asIdentifier()->name() == "yield") {
+                        this->throwError("Yield property is not supported yet");
+                        RELEASE_ASSERT_NOT_REACHED();
+                        /*
+                        arrow = true;
+                        expr = this->finalize(this->startNode(startToken), new ArrowParameterPlaceHolderNode());
+                        expr = {
+                            type: ArrowParameterPlaceHolder,
+                            params: [expr],
+                        };
+                        */
+                    }
+                    if (!arrow) {
+                        if (!this->context->isBindingElement) {
+                            this->throwUnexpectedToken(this->lookahead);
+                        }
+                        if (expr->type() == SequenceExpression) {
+                            const ExpressionNodeVector& expressions = ((SequenceExpressionNode*)expr.get())->expressions();
+                            for (size_t i = 0; i < expressions.size(); i++) {
+                                this->reinterpretExpressionAsPattern(expressions[i].get());
+                            }
+                        } else {
+                            this->reinterpretExpressionAsPattern(expr.get());
+                        }
+
+                        //TODO
+                        ExpressionNodeVector params;
+                        if (expr->type() == SequenceExpression) {
+                            params = ((SequenceExpressionNode*)expr.get())->expressions();
+                        } else {
+                            params.push_back(expr);
+                        }
+
+                        expr = this->finalize(this->startNode(this->lookahead), new ArrowParameterPlaceHolderNode(std::move(params)));
+                    }
+                }
+                this->context->isBindingElement = false;
             }
         }
-        this->expect(RightParenthesis);
 
         return expr;
     }
@@ -4659,16 +4732,16 @@ public:
     }
 
     // ECMA-262 12.15 Assignment Operators
-    /*
-    void checkPatternParam(ParseParameterOptions options, Node* param)
+    void checkPatternParam(ParseParameterOptions& options, Node* param)
     {
         switch (param->type()) {
         case Identifier:
-            this->validateParam(options, nodeExtraInfo.find(((IdentifierNode*)param))->second, ((IdentifierNode*)param)->name());
+            this->validateParam(options, nullptr, ((IdentifierNode*)param)->name());
             break;
         case RestElement:
             this->checkPatternParam(options, ((RestElementNode*)param)->argument());
             break;
+        /*
         // case AssignmentPattern:
         case AssignmentExpression:
         case AssignmentExpressionBitwiseAnd:
@@ -4685,8 +4758,10 @@ public:
         case AssignmentExpressionSimple:
             this->checkPatternParam(options, ((AssignmentExpressionSimpleNode*)param)->left());
             break;
+            */
         default:
             RELEASE_ASSERT_NOT_REACHED();
+            /*
              case Syntax.ArrayPattern:
                  for (let i = 0; i < param.elements.length; i++) {
                      if (param.elements[i] !== null) {
@@ -4703,67 +4778,62 @@ public:
                      this->checkPatternParam(options, param.properties[i].value);
                  }
                  break;
+                 */
         }
     }
-    */
-    /*
-     reinterpretAsCoverFormalsList(expr) {
-         let params = [expr];
-         let options;
 
-         switch (expr.type) {
-             case Syntax.Identifier:
-                 break;
-             case ArrowParameterPlaceHolder:
-                 params = expr.params;
-                 break;
-             default:
-                 return null;
-         }
+    ParseFormalParametersResult reinterpretAsCoverFormalsList(Node* expr)
+    {
+        PatternNodeVector params;
+        params.push_back(expr);
+        ParseParameterOptions options;
 
-         options = {
-             paramSet: {}
-         };
+        switch (expr->type()) {
+        case Identifier:
+            break;
+        case ArrowParameterPlaceHolder:
+            params = ((ArrowParameterPlaceHolderNode*)expr)->params();
+            break;
+        default:
+            return ParseFormalParametersResult();
+        }
 
-         for (let i = 0; i < params.length; ++i) {
-             const param = params[i];
-             if (param.type === Syntax.AssignmentPattern) {
-                 if (param.right.type === Syntax.YieldExpression) {
-                     if (param.right.argument) {
-                         this->throwUnexpectedToken(this->lookahead);
-                     }
-                     param.right.type = Syntax.Identifier;
-                     param.right.name = 'yield';
-                     delete param.right.argument;
-                     delete param.right.delegate;
+        for (size_t i = 0; i < params.size(); ++i) {
+            RefPtr<Node> param = params[i];
+            /*
+             if (param->type() == AssignmentPattern) {
+                 if (param->right()->type() == YieldExpression) {
+                    if (param.right.argument) {
+                        this.throwUnexpectedToken(this.lookahead);
+                    }
+                    param.right.type = Syntax.Identifier;
+                    param.right.name = 'yield';
+                    delete param.right.argument;
+                    delete param.right.delegate;
                  }
              }
-             this->checkPatternParam(options, param);
-             params[i] = param;
-         }
+             */
+            this->checkPatternParam(options, param.get());
+            //params[i] = param;
+        }
 
-         if (this->context.strict || !this->context.allowYield) {
-             for (let i = 0; i < params.length; ++i) {
-                 const param = params[i];
-                 if (param.type === Syntax.YieldExpression) {
-                     this->throwUnexpectedToken(this->lookahead);
-                 }
-             }
-         }
+        if (this->context->strict || !this->context->allowYield) {
+            for (size_t i = 0; i < params.size(); ++i) {
+                RefPtr<Node> param = params[i];
+                if (param->type() == YieldExpression) {
+                    this->throwUnexpectedToken(this->lookahead);
+                }
+            }
+        }
 
-         if (options.message === Messages.StrictParamDupe) {
-             const token = this->context.strict ? options.stricted : options.firstRestricted;
-             this->throwUnexpectedToken(token, options.message);
-         }
+        if (options.message == Messages::StrictParamDupe) {
+            RefPtr<ScannerResult> token = this->context->strict ? options.stricted : options.firstRestricted;
+            this->throwUnexpectedToken(token, options.message);
+        }
 
-         return {
-             params: params,
-             stricted: options.stricted,
-             firstRestricted: options.firstRestricted,
-             message: options.message
-         };
-     }
-*/
+        return ParseFormalParametersResult(params, options.stricted, options.firstRestricted, options.message);
+    }
+
     RefPtr<Node> parseAssignmentExpression()
     {
         RefPtr<Node> expr;
@@ -4774,132 +4844,135 @@ public:
             RefPtr<ScannerResult> startToken = this->lookahead;
             RefPtr<ScannerResult> token = startToken;
             expr = this->parseConditionalExpression();
+
             /*
-             if (expr->type() == ArrowParameterPlaceHolder || this->match('=>')) {
-                 RELEASE_ASSERT_NOT_REACHED();
-                 // ECMA-262 14.2 Arrow Function Definitions
-                 this->context->isAssignmentTarget = false;
-                 this->context->isBindingElement = false;
-                 const list = this->reinterpretAsCoverFormalsList(expr);
+            if (token.type === Token.Identifier && (token.lineNumber === this.lookahead.lineNumber) && token.value === 'async' && (this.lookahead.type === Token.Identifier)) {
+                const arg = this.parsePrimaryExpression();
+                expr = {
+                    type: ArrowParameterPlaceHolder,
+                    params: [arg],
+                    async: true
+                };
+            } */
 
-                 if (list) {
-                     if (this->hasLineTerminator) {
-                         this->tolerateUnexpectedToken(this->lookahead);
-                     }
-                     this->context->firstCoverInitializedNameError = null;
+            if (expr->type() == ArrowParameterPlaceHolder || this->match(Arrow)) {
+                // ECMA-262 14.2 Arrow Function Definitions
+                this->context->isAssignmentTarget = false;
+                this->context->isBindingElement = false;
+                ParseFormalParametersResult list = this->reinterpretAsCoverFormalsList(expr.get()); //TODO
 
-                     const previousStrict = this->context->strict;
-                     const previousAllowYield = this->context->allowYield;
-                     this->context->allowYield = true;
-
-                     const node = this->startNode(startToken);
-                     this->expect('=>');
-                     const body = this->match('{') ? this->parseFunctionSourceElements() :
-                         this->isolateCoverGrammar(this->parseAssignmentExpression);
-                     const expression = body.type !== Syntax.BlockStatement;
-
-                     if (this->context->strict && list.firstRestricted) {
-                         this->throwUnexpectedToken(list.firstRestricted, list.message);
-                     }
-                     if (this->context->strict && list.stricted) {
-                         this->tolerateUnexpectedToken(list.stricted, list.message);
-                     }
-                     expr = this->finalize(node, new Node.ArrowFunctionExpression(list.params, body, expression));
-
-                     this->context->strict = previousStrict;
-                     this->context->allowYield = previousAllowYield;
-                 }
-
-             } else {
-                 if (this->matchAssign()) {
-                     if (!this->context->isAssignmentTarget) {
-                         this->tolerateError(Messages.InvalidLHSInAssignment);
-                     }
-
-                     if (this->context->strict && expr.type === Syntax.Identifier) {
-                         const id = <Node.Identifier>(expr);
-                         if (this->scanner.isRestrictedWord(id.name)) {
-                             this->tolerateUnexpectedToken(token, Messages.StrictLHSAssignment);
-                         }
-                         if (this->scanner.isStrictModeReservedWord(id.name)) {
-                             this->tolerateUnexpectedToken(token, Messages.StrictReservedWord);
-                         }
-                     }
-
-                     if (!this->match('=')) {
-                         this->context->isAssignmentTarget = false;
-                         this->context->isBindingElement = false;
-                     } else {
-                         this->reinterpretExpressionAsPattern(expr);
-                     }
-
-                     token = this->nextToken();
-                     const right = this->isolateCoverGrammar(this->parseAssignmentExpression);
-                     expr = this->finalize(this->startNode(startToken), new Node.AssignmentExpression(token.value, expr, right));
-                     this->context->firstCoverInitializedNameError = null;
-                 }
-             }*/
-            if (this->matchAssign()) {
-                if (!this->context->isAssignmentTarget && this->context->strict) {
-                    this->tolerateError(Messages::InvalidLHSInAssignment, String::emptyString, String::emptyString, ErrorObject::ReferenceError);
-                }
-
-                if (this->context->strict && expr->type() == Identifier) {
-                    IdentifierNode* id = (IdentifierNode*)(expr.get());
-                    if (this->scanner->isRestrictedWord(id->name())) {
-                        this->tolerateUnexpectedToken(token, Messages::StrictLHSAssignment);
+                if (list.valid) {
+                    if (this->hasLineTerminator) {
+                        this->tolerateUnexpectedToken(this->lookahead);
                     }
-                    if (this->scanner->isStrictModeReservedWord(id->name())) {
-                        this->tolerateUnexpectedToken(token, Messages::StrictReservedWord);
+                    this->context->firstCoverInitializedNameError = nullptr;
+
+                    pushScopeContext(list.params, AtomicString());
+
+                    extractNamesFromFunctionParams(list.params);
+                    bool previousStrict = this->context->strict;
+                    bool previousAllowYield = this->context->allowYield;
+                    bool previousInArrowFunction = this->context->inArrowFunction;
+                    this->context->allowYield = true;
+                    this->context->inArrowFunction = true;
+
+                    MetaNode node = this->startNode(startToken);
+                    MetaNode nodeStart = this->createNode();
+    
+                    this->expect(Arrow);
+                    RefPtr<Node> body = this->match(LeftBrace) ? this->parseFunctionSourceElements() : this->isolateCoverGrammar(&Parser::parseAssignmentExpression);
+                    bool expression = body->type() != BlockStatement;
+                    if (expression) {
+                        if (this->config.parseSingleFunction) {
+                            ASSERT(this->config.parseSingleFunctionChildIndex.asUint32());
+                            this->config.parseSingleFunctionChildIndex = SmallValue(this->config.parseSingleFunctionChildIndex.asUint32() + 1);
+                        } else {
+                            scopeContexts.back()->m_locStart.line = nodeStart.line;
+                            scopeContexts.back()->m_locStart.column = nodeStart.column;
+                            scopeContexts.back()->m_locStart.index = nodeStart.index;
+
+                            scopeContexts.back()->m_locEnd.index = this->lastMarker.index;
+#ifndef NDEBUG
+                            scopeContexts.back()->m_locEnd.line = this->lastMarker.lineNumber;
+                            scopeContexts.back()->m_locEnd.column = this->lastMarker.index - this->lastMarker.lineStart;
+#endif
+                        }
                     }
-                }
 
-                if (!this->match(Substitution)) {
-                    this->context->isAssignmentTarget = false;
-                    this->context->isBindingElement = false;
-                } else {
-                    this->reinterpretExpressionAsPattern(expr.get());
-                }
+                    if (this->context->strict && list.firstRestricted) {
+                        this->throwUnexpectedToken(list.firstRestricted, list.message);
+                    }
+                    if (this->context->strict && list.stricted) {
+                        this->tolerateUnexpectedToken(list.stricted, list.message);
+                    }
+                    expr = this->finalize(node, new ArrowFunctionExpressionNode(std::move(list.params), body.get(), popScopeContext(node), expression)); //TODO
 
-                if (expr->isLiteral() || expr->type() == ASTNodeType::ThisExpression) {
-                    this->throwError(Messages::InvalidLHSInAssignment, String::emptyString, String::emptyString, ErrorObject::ReferenceError);
+                    this->context->strict = previousStrict;
+                    this->context->allowYield = previousAllowYield;
+                    this->context->inArrowFunction = previousInArrowFunction;
                 }
+            } else {
+                if (this->matchAssign()) {
+                    if (!this->context->isAssignmentTarget && this->context->strict) {
+                        this->tolerateError(Messages::InvalidLHSInAssignment, String::emptyString, String::emptyString, ErrorObject::ReferenceError);
+                    }
 
-                Node* exprResult;
-                token = this->nextToken();
-                RefPtr<Node> right = this->isolateCoverGrammar(&Parser::parseAssignmentExpression);
-                if (token->valuePunctuatorsKind == Substitution) {
-                    exprResult = new AssignmentExpressionSimpleNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == PlusEqual) {
-                    exprResult = new AssignmentExpressionPlusNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == MinusEqual) {
-                    exprResult = new AssignmentExpressionMinusNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == MultiplyEqual) {
-                    exprResult = new AssignmentExpressionMultiplyNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == DivideEqual) {
-                    exprResult = new AssignmentExpressionDivisionNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == ModEqual) {
-                    exprResult = new AssignmentExpressionModNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == LeftShiftEqual) {
-                    exprResult = new AssignmentExpressionLeftShiftNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == RightShiftEqual) {
-                    exprResult = new AssignmentExpressionSignedRightShiftNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == UnsignedRightShiftEqual) {
-                    exprResult = new AssignmentExpressionUnsignedShiftNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == BitwiseXorEqual) {
-                    exprResult = new AssignmentExpressionBitwiseXorNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == BitwiseAndEqual) {
-                    exprResult = new AssignmentExpressionBitwiseAndNode(expr.get(), right.get());
-                } else if (token->valuePunctuatorsKind == BitwiseOrEqual) {
-                    exprResult = new AssignmentExpressionBitwiseOrNode(expr.get(), right.get());
-                } else {
-                    RELEASE_ASSERT_NOT_REACHED();
+                    if (this->context->strict && expr->type() == Identifier) {
+                        IdentifierNode* id = expr->asIdentifier();
+                        if (this->scanner->isRestrictedWord(id->name())) {
+                            this->tolerateUnexpectedToken(token, Messages::StrictLHSAssignment);
+                        }
+                        if (this->scanner->isStrictModeReservedWord(id->name())) {
+                            this->tolerateUnexpectedToken(token, Messages::StrictReservedWord);
+                        }
+                    }
+
+                    if (!this->match(Substitution)) {
+                        this->context->isAssignmentTarget = false;
+                        this->context->isBindingElement = false;
+                    } else {
+                        this->reinterpretExpressionAsPattern(expr.get());
+                    }
+
+                    if (expr->isLiteral() || expr->type() == ASTNodeType::ThisExpression) {
+                        this->throwError(Messages::InvalidLHSInAssignment, String::emptyString, String::emptyString, ErrorObject::ReferenceError);
+                    }
+
+                    Node* exprResult;
+                    token = this->nextToken();
+                    RefPtr<Node> right = this->isolateCoverGrammar(&Parser::parseAssignmentExpression);
+                    if (token->valuePunctuatorsKind == Substitution) {
+                        exprResult = new AssignmentExpressionSimpleNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == PlusEqual) {
+                        exprResult = new AssignmentExpressionPlusNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == MinusEqual) {
+                        exprResult = new AssignmentExpressionMinusNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == MultiplyEqual) {
+                        exprResult = new AssignmentExpressionMultiplyNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == DivideEqual) {
+                        exprResult = new AssignmentExpressionDivisionNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == ModEqual) {
+                        exprResult = new AssignmentExpressionModNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == LeftShiftEqual) {
+                        exprResult = new AssignmentExpressionLeftShiftNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == RightShiftEqual) {
+                        exprResult = new AssignmentExpressionSignedRightShiftNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == UnsignedRightShiftEqual) {
+                        exprResult = new AssignmentExpressionUnsignedShiftNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == BitwiseXorEqual) {
+                        exprResult = new AssignmentExpressionBitwiseXorNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == BitwiseAndEqual) {
+                        exprResult = new AssignmentExpressionBitwiseAndNode(expr.get(), right.get());
+                    } else if (token->valuePunctuatorsKind == BitwiseOrEqual) {
+                        exprResult = new AssignmentExpressionBitwiseOrNode(expr.get(), right.get());
+                    } else {
+                        RELEASE_ASSERT_NOT_REACHED();
+                    }
+                    expr = this->finalize(this->startNode(startToken), exprResult);
+                    this->context->firstCoverInitializedNameError = nullptr;
                 }
-                expr = this->finalize(this->startNode(startToken), exprResult);
-                this->context->firstCoverInitializedNameError = nullptr;
             }
         }
-
         return expr;
     }
 
@@ -6011,9 +6084,64 @@ public:
         return statement;
     }
 
+    RefPtr<Node> parseArrowFunctionSourceElements()
+    {
+        ASSERT(this->config.parseSingleFunction);
+
+        if (this->match(LeftBrace)) {
+            return parseFunctionSourceElements();
+        }
+
+        bool prevInDirectCatchScope = this->context->inDirectCatchScope;
+        this->context->inDirectCatchScope = false;
+
+        auto previousLabelSet = this->context->labelSet;
+        bool previousInIteration = this->context->inIteration;
+        bool previousInSwitch = this->context->inSwitch;
+        bool previousInFunctionBody = this->context->inFunctionBody;
+
+        this->context->labelSet.clear();
+        this->context->inIteration = false;
+        this->context->inSwitch = false;
+        this->context->inFunctionBody = true;
+
+        bool previousStrict = this->context->strict;
+        bool previousAllowYield = this->context->allowYield;
+        this->context->allowYield = true;
+
+        this->expect(Arrow);
+        MetaNode nodeStart = this->createNode();
+
+        RefPtr<Node> expr = this->isolateCoverGrammar(&Parser::parseAssignmentExpression);
+
+        RefPtr<StatementContainer> body = StatementContainer::create();
+        body->appendChild(this->finalize(nodeStart, new ReturnStatmentNode(expr.get())), nullptr);
+
+        /*
+        if (this->context->strict && list.firstRestricted) {
+            this->throwUnexpectedToken(list.firstRestricted, list.message);
+        }
+        if (this->context->strict && list.stricted) {
+            this->tolerateUnexpectedToken(list.stricted, list.message);
+        }
+        */
+
+        this->context->strict = previousStrict;
+        this->context->allowYield = previousAllowYield;
+
+        this->context->labelSet = previousLabelSet;
+        this->context->inIteration = previousInIteration;
+        this->context->inSwitch = previousInSwitch;
+        this->context->inFunctionBody = previousInFunctionBody;
+
+        this->context->inDirectCatchScope = prevInDirectCatchScope;
+
+        return this->finalize(nodeStart, new BlockStatementNode(body.get()));
+    }
+
     // ECMA-262 14.1 Function Definition
 
-    RefPtr<BlockStatementNode> parseFunctionSourceElements()
+    RefPtr<Node> parseFunctionSourceElements()
     {
         if (this->config.parseSingleFunction) {
             if (this->config.parseSingleFunctionChildIndex.asUint32()) {
@@ -6122,7 +6250,9 @@ public:
         }
 
         bool previousAllowYield = this->context->allowYield;
+        bool previousInArrowFunction = this->context->inArrowFunction;
         this->context->allowYield = !isGenerator;
+        this->context->inArrowFunction = false;
 
         this->expect(LeftParenthesis);
         ParseFormalParametersResult formalParameters = this->parseFormalParameters(firstRestricted);
@@ -6139,7 +6269,7 @@ public:
         extractNamesFromFunctionParams(params);
 
         bool previousStrict = this->context->strict;
-        RefPtr<BlockStatementNode> body = this->parseFunctionSourceElements();
+        RefPtr<Node> body = this->parseFunctionSourceElements();
         if (this->context->strict && firstRestricted) {
             this->throwUnexpectedToken(firstRestricted, message);
         }
@@ -6149,6 +6279,7 @@ public:
 
         this->context->strict = previousStrict;
         this->context->allowYield = previousAllowYield;
+        this->context->inArrowFunction = previousInArrowFunction;
 
         if (this->context->inDirectCatchScope) {
             scopeContexts.back()->m_needsSpecialInitialize = true;
@@ -6178,7 +6309,9 @@ public:
         RefPtr<ScannerResult> firstRestricted = nullptr;
 
         bool previousAllowYield = this->context->allowYield;
+        bool previousInArrowFunction = this->context->inArrowFunction;
         this->context->allowYield = !isGenerator;
+        this->context->inArrowFunction = false;
 
         if (!this->match(LeftParenthesis)) {
             RefPtr<ScannerResult> token = this->lookahead;
@@ -6220,7 +6353,7 @@ public:
 
         extractNamesFromFunctionParams(params);
         bool previousStrict = this->context->strict;
-        RefPtr<BlockStatementNode> body = this->parseFunctionSourceElements();
+        RefPtr<Node> body = this->parseFunctionSourceElements();
         if (this->context->strict && firstRestricted) {
             this->throwUnexpectedToken(firstRestricted, message);
         }
@@ -6229,6 +6362,7 @@ public:
         }
         this->context->strict = previousStrict;
         this->context->allowYield = previousAllowYield;
+        this->context->inArrowFunction = previousInArrowFunction;
 
         return this->finalize(node, new FunctionExpressionNode(fnName, std::move(params), body.get(), popScopeContext(node), isGenerator));
     }
@@ -6815,7 +6949,12 @@ std::tuple<RefPtr<Node>, ASTScopeContext*> parseSingleFunction(::Escargot::Conte
     parser.config.parseSingleFunctionTarget = codeBlock;
     auto scopeCtx = new ASTScopeContext(codeBlock->isStrict());
     parser.scopeContexts.pushBack(scopeCtx);
-    auto nd = parser.parseFunctionSourceElements();
+    RefPtr<Node> nd;
+    if (codeBlock->isArrowFunctionExpression()) {
+        nd = parser.parseArrowFunctionSourceElements();
+    } else {
+        nd = parser.parseFunctionSourceElements();
+    }
     return std::make_tuple(nd, scopeCtx);
 }
 

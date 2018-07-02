@@ -75,7 +75,7 @@ CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     , m_nativeFunctionData(nullptr)
 {
     m_hasCallNativeFunctionCode = true;
-    m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = m_isFunctionExpression = m_isFunctionDeclaration = m_isFunctionDeclarationWithSpecialBinding = false;
+    m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = false;
     m_functionName = info.m_name;
     m_isStrict = info.m_isStrict;
     m_isConsturctor = info.m_isConsturctor;
@@ -93,6 +93,7 @@ CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     m_isEvalCodeInFunction = false;
     m_isBindedFunction = false;
     m_needsVirtualIDOperation = false;
+    m_needToLoadThisValue = false;
 
     m_parameterCount = info.m_argumentCount;
 
@@ -108,7 +109,7 @@ CodeBlock::CodeBlock(Context* ctx, AtomicString name, size_t argc, bool isStrict
     , m_nativeFunctionData(nullptr)
 {
     m_hasCallNativeFunctionCode = true;
-    m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = m_isFunctionExpression = m_isFunctionDeclaration = m_isFunctionDeclarationWithSpecialBinding = false;
+    m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = false;
     m_functionName = name;
     m_isStrict = isStrict;
     m_isConsturctor = isCtor;
@@ -126,6 +127,7 @@ CodeBlock::CodeBlock(Context* ctx, AtomicString name, size_t argc, bool isStrict
     m_isEvalCodeInFunction = false;
     m_isBindedFunction = false;
     m_needsVirtualIDOperation = false;
+    m_needToLoadThisValue = false;
     m_parameterCount = argc;
     m_nativeFunctionData = info;
 }
@@ -162,7 +164,7 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     m_functionName = state.context()->staticStrings().boundFunction;
     m_hasCallNativeFunctionCode = true;
     m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = false;
-    m_isFunctionExpression = m_isFunctionDeclaration = m_isFunctionDeclarationWithSpecialBinding = false;
+    m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = false;
     m_isConsturctor = false;
     m_isStrict = false;
     m_hasEval = false;
@@ -179,6 +181,7 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     m_isEvalCodeInFunction = false;
     m_isBindedFunction = true;
     m_needsVirtualIDOperation = false;
+    m_needToLoadThisValue = false;
 
     size_t targetFunctionLength = targetCodeBlock->parameterCount();
     m_parameterCount = targetFunctionLength > boundArgc ? targetFunctionLength - boundArgc : 0;
@@ -222,6 +225,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isFunctionDeclaration = false;
     m_isFunctionDeclarationWithSpecialBinding = false;
     m_isFunctionExpression = false;
+    m_isArrowFunctionExpression = false;
     m_isStrict = isStrict;
     m_hasEval = false;
     if (initFlags & CodeBlockInitFlag::CodeBlockHasEval) {
@@ -268,6 +272,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isEvalCodeInFunction = false;
     m_isBindedFunction = false;
     m_needsVirtualIDOperation = false;
+    m_needToLoadThisValue = false;
 
     for (size_t i = 0; i < innerIdentifiers.size(); i++) {
         IdentifierInfo info;
@@ -365,6 +370,12 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
         m_isFunctionExpression = false;
     }
 
+    if (initFlags & CodeBlockInitFlag::CodeBlockIsArrowFunctionExpression) {
+        m_isArrowFunctionExpression = true;
+    } else {
+        m_isArrowFunctionExpression = false;
+    }
+
     m_canUseIndexedVariableStorage = !hasEvalWithYield() && !m_inCatch;
 
     if (m_inWith) {
@@ -393,6 +404,26 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isEvalCodeInFunction = false;
     m_isBindedFunction = false;
     m_needsVirtualIDOperation = false;
+    m_needToLoadThisValue = false;
+}
+
+bool InterpretedCodeBlock::needToStoreThisValue()
+{
+    return hasName(m_context->staticStrings().stringThis);
+}
+
+void InterpretedCodeBlock::captureThisValue()
+{
+    ASSERT(!hasName(m_context->staticStrings().stringThis));
+    m_canAllocateEnvironmentOnStack = false;
+
+    IdentifierInfo info;
+    info.m_name = m_context->staticStrings().stringThis;
+    info.m_needToAllocateOnStack = false;
+    info.m_isMutable = true;
+    info.m_isExplicitlyDeclaredOrParameterName = false;
+    info.m_indexForIndexedStorage = SIZE_MAX;
+    m_identifierInfos.push_back(info);
 }
 
 bool InterpretedCodeBlock::tryCaptureIdentifiersFromChildCodeBlock(AtomicString name)

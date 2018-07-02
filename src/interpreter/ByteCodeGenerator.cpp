@@ -102,6 +102,30 @@ ALWAYS_INLINE void assignStackIndexIfNeeded(ByteCodeRegisterIndex& registerIndex
     }
 }
 
+void ByteCodeGenerator::generateStoreThisValueByteCode(ByteCodeBlock* block, ByteCodeGenerateContext* context)
+{
+    InterpretedCodeBlock* codeBlock = block->m_codeBlock;
+    InterpretedCodeBlock::IndexedIdentifierInfo info = codeBlock->indexedIdentifierInfo(codeBlock->context()->staticStrings().stringThis);
+    ASSERT(!codeBlock->isGlobalScopeCodeBlock() && codeBlock->canUseIndexedVariableStorage());
+    ASSERT(!context->m_isWithScope); 
+    ASSERT(info.m_isResultSaved && !info.m_isStackAllocated && !info.m_upperIndex);
+
+    size_t cIdx = context->m_catchScopeCount;
+    block->pushCode(StoreByHeapIndex(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT, info.m_upperIndex + cIdx, info.m_index), context, nullptr);
+}
+
+void ByteCodeGenerator::generateLoadThisValueByteCode(ByteCodeBlock* block, ByteCodeGenerateContext* context)
+{
+    InterpretedCodeBlock* codeBlock = block->m_codeBlock;
+    InterpretedCodeBlock::IndexedIdentifierInfo info = codeBlock->upperIndexedIdentifierInfo(codeBlock->context()->staticStrings().stringThis);
+    ASSERT(codeBlock->isArrowFunctionExpression() && codeBlock->canUseIndexedVariableStorage());
+    ASSERT(!context->m_isWithScope);
+    ASSERT(info.m_isResultSaved && !info.m_isStackAllocated && info.m_upperIndex == 1);
+
+    size_t cIdx = context->m_catchScopeCount;
+    block->pushCode(LoadByHeapIndex(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT, info.m_upperIndex + cIdx, info.m_index), context, nullptr);
+}
+
 ByteCodeBlock* ByteCodeGenerator::generateByteCode(Context* c, InterpretedCodeBlock* codeBlock, Node* ast, ASTScopeContext* scopeCtx, bool isEvalMode, bool isOnGlobal, bool shouldGenerateLOCData)
 {
     ByteCodeBlock* block = new ByteCodeBlock(codeBlock);
@@ -128,7 +152,16 @@ ByteCodeBlock* ByteCodeGenerator::generateByteCode(Context* c, InterpretedCodeBl
         block->m_locData = new ByteCodeLOCData();
     }
 
-    // generate init function decls first
+    // load/store this value first
+    if (codeBlock->needToLoadThisValue()) {
+        generateLoadThisValueByteCode(block, &ctx);
+    }
+
+    if (codeBlock->needToStoreThisValue()) {
+        generateStoreThisValueByteCode(block, &ctx);
+    }
+
+    // generate init function decls
     size_t len = codeBlock->childBlocks().size();
     for (size_t i = 0; i < len; i++) {
         CodeBlock* b = codeBlock->childBlocks()[i];

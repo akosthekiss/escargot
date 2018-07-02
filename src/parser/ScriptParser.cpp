@@ -45,7 +45,7 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
                                                                             | (scopeCtx->m_hasCatch ? CodeBlock::CodeBlockHasCatch : 0)
                                                                             | (scopeCtx->m_hasYield ? CodeBlock::CodeBlockHasYield : 0)));
     } else {
-        bool isFE = scopeCtx->m_nodeType == FunctionExpression;
+        bool isFE = scopeCtx->m_nodeType == FunctionExpression || scopeCtx->m_nodeType == ArrowFunctionExpression;
         bool isFD = scopeCtx->m_nodeType == FunctionDeclaration;
 
         if (scopeCtx->m_needsSpecialInitialize)
@@ -63,6 +63,7 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
                                                                             | (scopeCtx->m_inWith ? CodeBlock::CodeBlockInWith : 0)
                                                                             | (isFE ? CodeBlock::CodeBlockIsFunctionExpression : 0)
                                                                             | (isFD ? CodeBlock::CodeBlockIsFunctionDeclaration : 0)
+                                                                            | (scopeCtx->m_isArrowFunctionExpression ? CodeBlock::CodeBlockIsArrowFunctionExpression : 0)
                                                                             | (scopeCtx->m_needsSpecialInitialize ? CodeBlock::CodeBlockIsFunctionDeclarationWithSpecialBinding : 0)));
     }
 
@@ -91,6 +92,7 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
 
         bool hasCapturedIdentifier = false;
         AtomicString arguments = ctx->staticStrings().arguments;
+        AtomicString stringThis = ctx->staticStrings().stringThis;
         for (size_t i = 0; i < scopeCtx->m_usingNames.size(); i++) {
             AtomicString uname = scopeCtx->m_usingNames[i];
             if (uname == arguments) {
@@ -125,6 +127,12 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
                             }
                         }
                     }
+                }
+            } else if (uname == stringThis) {
+                ASSERT(codeBlock->isArrowFunctionExpression());
+                if (!codeBlock->parentCodeBlock()->isGlobalScopeCodeBlock()) {
+                    codeBlock->parentCodeBlock()->captureThisValue();
+                    codeBlock->setNeedToLoadThisValue();
                 }
             } else if (!codeBlock->hasName(uname)) {
                 InterpretedCodeBlock* c = codeBlock->parentCodeBlock();

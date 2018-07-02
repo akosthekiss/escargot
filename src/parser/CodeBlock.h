@@ -115,6 +115,7 @@ public:
         CodeBlockIsFunctionDeclaration = 1 << 6,
         CodeBlockIsFunctionDeclarationWithSpecialBinding = 1 << 7,
         CodeBlockIsFunctionExpression = 1 << 8,
+        CodeBlockIsArrowFunctionExpression = 1 << 9,
     };
 
     struct IdentifierInfo {
@@ -195,6 +196,21 @@ public:
     bool isFunctionExpression() const
     {
         return m_isFunctionExpression;
+    }
+
+    bool isArrowFunctionExpression() const
+    {
+        return m_isArrowFunctionExpression;
+    }
+
+    bool needToLoadThisValue() const
+    {
+        return m_needToLoadThisValue;
+    }
+
+    void setNeedToLoadThisValue() 
+    {
+        m_needToLoadThisValue = true;
     }
 
     bool hasCallNativeFunctionCode() const
@@ -303,10 +319,12 @@ protected:
     bool m_isFunctionExpression : 1;
     bool m_isFunctionDeclaration : 1;
     bool m_isFunctionDeclarationWithSpecialBinding : 1;
+    bool m_isArrowFunctionExpression : 1;
     bool m_isInWithScope : 1;
     bool m_isEvalCodeInFunction : 1;
     bool m_isBindedFunction : 1;
     bool m_needsVirtualIDOperation : 1;
+    bool m_needToLoadThisValue : 1;
     uint16_t m_parameterCount;
 
     AtomicString m_functionName;
@@ -333,6 +351,8 @@ public:
     {
         m_childBlocks.push_back(cb);
     }
+    bool needToStoreThisValue();
+    void captureThisValue();
     bool tryCaptureIdentifiersFromChildCodeBlock(AtomicString name);
     void notifySelfOrChildHasEvalWithYield();
 
@@ -415,6 +435,36 @@ public:
             cb = cb->asInterpretedCodeBlock()->parentCodeBlock();
         }
         return false;
+    }
+
+    IndexedIdentifierInfo upperIndexedIdentifierInfo(const AtomicString& name)
+    {
+        size_t upperIndex = 1;
+        IndexedIdentifierInfo info;
+
+        ASSERT(this->parentCodeBlock());
+        InterpretedCodeBlock* blk = this->parentCodeBlock();
+
+        while (!blk->isGlobalScopeCodeBlock() && blk->canUseIndexedVariableStorage()) {
+            size_t index = blk->findName(name);
+            if (index != SIZE_MAX) {
+                info.m_isResultSaved = true;
+                info.m_isStackAllocated = blk->m_identifierInfos[index].m_needToAllocateOnStack;
+                info.m_upperIndex = upperIndex;
+                info.m_isMutable = blk->m_identifierInfos[index].m_isMutable;
+                if (blk->canUseIndexedVariableStorage()) {
+                    info.m_index = blk->m_identifierInfos[index].m_indexForIndexedStorage;
+                } else {
+                    info.m_index = index;
+                }
+                return info;
+            }
+            upperIndex++;
+            blk = blk->parentCodeBlock();
+        }
+
+        info.m_isResultSaved = false;
+        return info;
     }
 
     IndexedIdentifierInfo indexedIdentifierInfo(const AtomicString& name)
