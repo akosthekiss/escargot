@@ -96,45 +96,36 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
         for (size_t i = 0; i < scopeCtx->m_usingNames.size(); i++) {
             AtomicString uname = scopeCtx->m_usingNames[i];
             if (uname == arguments) {
-                const InterpretedCodeBlock::FunctionParametersInfoVector& pv = codeBlock->parametersInfomation();
-                bool hasArgumentsParameter = false;
-                for (size_t i = 0; i < pv.size(); i++) {
-                    if (pv[i].m_name == arguments) {
-                        hasArgumentsParameter = true;
-                        break;
-                    }
-                }
-                if (!hasArgumentsParameter) {
-                    codeBlock->m_usesArgumentsObject = true;
-                    if (!codeBlock->hasName(arguments)) {
-                        CodeBlock::IdentifierInfo info;
-                        info.m_indexForIndexedStorage = SIZE_MAX;
-                        info.m_name = arguments;
-                        info.m_needToAllocateOnStack = true;
-                        info.m_isMutable = true;
-                        codeBlock->m_identifierInfos.pushBack(info);
-                    }
-
-                    InterpretedCodeBlock* b = codeBlock;
-                    if (b->parameterCount()) {
-                        b->m_canAllocateEnvironmentOnStack = false;
-                        for (size_t j = 0; j < b->parametersInfomation().size(); j++) {
-                            for (size_t k = 0; k < b->identifierInfos().size(); k++) {
-                                if (b->identifierInfos()[k].m_name == b->parametersInfomation()[j].m_name) {
-                                    b->m_identifierInfos[k].m_needToAllocateOnStack = false;
-                                    break;
-                                }
+                if (UNLIKELY(codeBlock->hasParameter(arguments))) {
+                    continue;
+                } else {
+                    if (LIKELY(!codeBlock->isArrowFunctionExpression())) {
+                        codeBlock->captureArguments();
+                        continue;
+                    } else {
+                        InterpretedCodeBlock* c = codeBlock->parentCodeBlock();
+                        while (c && !c->isGlobalScopeCodeBlock()) {
+                            if (c->hasParameter(arguments)) {
+                                break;
+                            } else if (!c->isArrowFunctionExpression()) {
+                                c->captureArguments();
+                                break;
                             }
+                            c = c->parentCodeBlock();
                         }
                     }
                 }
             } else if (uname == stringThis) {
                 ASSERT(codeBlock->isArrowFunctionExpression());
                 if (!codeBlock->parentCodeBlock()->isGlobalScopeCodeBlock()) {
-                    codeBlock->parentCodeBlock()->captureThisValue();
+                    codeBlock->parentCodeBlock()->captureThis();
                     codeBlock->setNeedToLoadThisValue();
+                    hasCapturedIdentifier = true;
                 }
-            } else if (!codeBlock->hasName(uname)) {
+                continue;
+            }
+
+            if (!codeBlock->hasName(uname)) {
                 InterpretedCodeBlock* c = codeBlock->parentCodeBlock();
                 while (c) {
                     if (c->tryCaptureIdentifiersFromChildCodeBlock(uname)) {

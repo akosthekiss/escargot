@@ -106,24 +106,36 @@ void ByteCodeGenerator::generateStoreThisValueByteCode(ByteCodeBlock* block, Byt
 {
     InterpretedCodeBlock* codeBlock = block->m_codeBlock;
     InterpretedCodeBlock::IndexedIdentifierInfo info = codeBlock->indexedIdentifierInfo(codeBlock->context()->staticStrings().stringThis);
-    ASSERT(!codeBlock->isGlobalScopeCodeBlock() && codeBlock->canUseIndexedVariableStorage());
-    ASSERT(!context->m_isWithScope);
-    ASSERT(info.m_isResultSaved && !info.m_isStackAllocated && !info.m_upperIndex);
+    ASSERT(!codeBlock->isGlobalScopeCodeBlock());
 
-    size_t cIdx = context->m_catchScopeCount;
-    block->pushCode(StoreByHeapIndex(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT, info.m_upperIndex + cIdx, info.m_index), context, nullptr);
+    if (codeBlock->canUseIndexedVariableStorage()) {
+        if (context->m_isWithScope) {
+            block->pushCode(StoreByName(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT, codeBlock->context()->staticStrings().stringThis), context, nullptr);
+        } else {
+            ASSERT(info.m_isResultSaved && !info.m_upperIndex && !context->m_catchScopeCount);
+            block->pushCode(StoreByHeapIndex(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT, 0, info.m_index), context, nullptr);
+        }
+    } else {
+        block->pushCode(StoreByName(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT, codeBlock->context()->staticStrings().stringThis), context, nullptr);
+    }
 }
 
 void ByteCodeGenerator::generateLoadThisValueByteCode(ByteCodeBlock* block, ByteCodeGenerateContext* context)
 {
     InterpretedCodeBlock* codeBlock = block->m_codeBlock;
     InterpretedCodeBlock::IndexedIdentifierInfo info = codeBlock->upperIndexedIdentifierInfo(codeBlock->context()->staticStrings().stringThis);
-    ASSERT(codeBlock->isArrowFunctionExpression() && codeBlock->canUseIndexedVariableStorage());
-    ASSERT(!context->m_isWithScope);
-    ASSERT(info.m_isResultSaved && !info.m_isStackAllocated && info.m_upperIndex == 1);
+    ASSERT(codeBlock->isArrowFunctionExpression());
 
-    size_t cIdx = context->m_catchScopeCount;
-    block->pushCode(LoadByHeapIndex(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT, info.m_upperIndex + cIdx, info.m_index), context, nullptr);
+    if (codeBlock->canUseIndexedVariableStorage()) {
+        if (context->m_isWithScope || !info.m_isResultSaved) {
+            block->pushCode(LoadByName(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT, codeBlock->context()->staticStrings().stringThis), context, nullptr);
+        } else {
+            ASSERT(info.m_isResultSaved && info.m_upperIndex == 1 && !context->m_catchScopeCount);
+            block->pushCode(LoadByHeapIndex(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT, info.m_upperIndex, info.m_index), context, nullptr);
+        }
+    } else {
+        block->pushCode(LoadByName(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT, codeBlock->context()->staticStrings().stringThis), context, nullptr);
+    }
 }
 
 ByteCodeBlock* ByteCodeGenerator::generateByteCode(Context* c, InterpretedCodeBlock* codeBlock, Node* ast, ASTScopeContext* scopeCtx, bool isEvalMode, bool isOnGlobal, bool shouldGenerateLOCData)

@@ -104,7 +104,7 @@ CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = false;
     m_functionName = info.m_name;
     m_isStrict = info.m_isStrict;
-    m_isConsturctor = info.m_isConsturctor;
+    m_isConstructor = info.m_isConstructor;
     m_hasEval = false;
     m_hasWith = false;
     m_hasCatch = false;
@@ -138,7 +138,7 @@ CodeBlock::CodeBlock(Context* ctx, AtomicString name, size_t argc, bool isStrict
     m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = false;
     m_functionName = name;
     m_isStrict = isStrict;
-    m_isConsturctor = isCtor;
+    m_isConstructor = isCtor;
     m_hasEval = false;
     m_hasWith = false;
     m_hasCatch = false;
@@ -191,7 +191,7 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     m_hasCallNativeFunctionCode = true;
     m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = false;
     m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = false;
-    m_isConsturctor = false;
+    m_isConstructor = false;
     m_isStrict = false;
     m_hasEval = false;
     m_hasWith = false;
@@ -246,7 +246,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_byteCodeBlock = nullptr;
 
     m_parameterCount = 0;
-    m_isConsturctor = false;
+    m_isConstructor = false;
     m_hasCallNativeFunctionCode = false;
     m_isFunctionDeclaration = false;
     m_isFunctionDeclarationWithSpecialBinding = false;
@@ -337,7 +337,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
         m_parametersInfomation[i].m_isDuplicated = false;
     }
     m_parameterCount = parameterNames.size();
-    m_isConsturctor = true;
+    m_isConstructor = true;
     m_hasCallNativeFunctionCode = false;
     m_isStrict = isStrict;
     if (initFlags & CodeBlockInitFlag::CodeBlockHasEval) {
@@ -398,6 +398,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
 
     if (initFlags & CodeBlockInitFlag::CodeBlockIsArrowFunctionExpression) {
         m_isArrowFunctionExpression = true;
+        m_isConstructor = false;
     } else {
         m_isArrowFunctionExpression = false;
     }
@@ -438,9 +439,14 @@ bool InterpretedCodeBlock::needToStoreThisValue()
     return hasName(m_context->staticStrings().stringThis);
 }
 
-void InterpretedCodeBlock::captureThisValue()
+void InterpretedCodeBlock::captureThis()
 {
-    ASSERT(!hasName(m_context->staticStrings().stringThis));
+    ASSERT(!isGlobalScopeCodeBlock());
+
+    if (hasName(m_context->staticStrings().stringThis)) {
+        return;
+    }
+
     m_canAllocateEnvironmentOnStack = false;
 
     IdentifierInfo info;
@@ -450,6 +456,38 @@ void InterpretedCodeBlock::captureThisValue()
     info.m_isExplicitlyDeclaredOrParameterName = false;
     info.m_indexForIndexedStorage = SIZE_MAX;
     m_identifierInfos.push_back(info);
+}
+
+void InterpretedCodeBlock::captureArguments()
+{
+    AtomicString arguments = m_context->staticStrings().arguments;
+    ASSERT(!hasParameter(arguments));
+    ASSERT(!isGlobalScopeCodeBlock() && !isArrowFunctionExpression());
+
+    if (m_usesArgumentsObject) {
+        return;
+    }
+
+    m_usesArgumentsObject = true;
+    if (!hasName(arguments)) {
+        IdentifierInfo info;
+        info.m_indexForIndexedStorage = SIZE_MAX;
+        info.m_name = arguments;
+        info.m_needToAllocateOnStack = true;
+        info.m_isMutable = true;
+        m_identifierInfos.pushBack(info);
+    }
+    if (m_parameterCount) {
+        m_canAllocateEnvironmentOnStack = false;
+        for (size_t j = 0; j < m_parametersInfomation.size(); j++) {
+            for (size_t k = 0; k < m_identifierInfos.size(); k++) {
+                if (m_identifierInfos[k].m_name == m_parametersInfomation[j].m_name) {
+                    m_identifierInfos[k].m_needToAllocateOnStack = false;
+                    break;
+                }
+            }
+        }
+    }
 }
 
 bool InterpretedCodeBlock::tryCaptureIdentifiersFromChildCodeBlock(AtomicString name)
@@ -662,7 +700,7 @@ DefaultConstructorCodeBlock::DefaultConstructorCodeBlock(Context* ctx, Node* nam
     if (name && name->isIdentifier()) {
         m_functionName = name->asIdentifier()->name();
     }
-    m_isConsturctor = true;
+    m_isConstructor = true;
     m_isClass = true;
 }
 }

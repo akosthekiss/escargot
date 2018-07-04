@@ -2933,6 +2933,9 @@ public:
             if (c->callee()->isIdentifier()) {
                 if (((IdentifierNode*)c->callee())->name().string()->equals("eval")) {
                     scopeContexts.back()->m_hasEval = true;
+                    if (this->context->inArrowFunction) {
+                        scopeContexts.back()->insertUsingName(this->escargotContext->staticStrings().stringThis);
+                    }
                 }
             }
         } else if (type == WithStatement) {
@@ -4881,17 +4884,16 @@ public:
                         if (this->config.parseSingleFunction) {
                             ASSERT(this->config.parseSingleFunctionChildIndex.asUint32());
                             this->config.parseSingleFunctionChildIndex = SmallValue(this->config.parseSingleFunctionChildIndex.asUint32() + 1);
-                        } else {
-                            scopeContexts.back()->m_locStart.line = nodeStart.line;
-                            scopeContexts.back()->m_locStart.column = nodeStart.column;
-                            scopeContexts.back()->m_locStart.index = nodeStart.index;
-
-                            scopeContexts.back()->m_locEnd.index = this->lastMarker.index;
-#ifndef NDEBUG
-                            scopeContexts.back()->m_locEnd.line = this->lastMarker.lineNumber;
-                            scopeContexts.back()->m_locEnd.column = this->lastMarker.index - this->lastMarker.lineStart;
-#endif
                         }
+                        scopeContexts.back()->m_locStart.line = nodeStart.line;
+                        scopeContexts.back()->m_locStart.column = nodeStart.column;
+                        scopeContexts.back()->m_locStart.index = nodeStart.index;
+
+                        scopeContexts.back()->m_locEnd.index = this->lastMarker.index;
+#ifndef NDEBUG
+                        scopeContexts.back()->m_locEnd.line = this->lastMarker.lineNumber;
+                        scopeContexts.back()->m_locEnd.column = this->lastMarker.index - this->lastMarker.lineStart;
+#endif
                     }
 
                     if (this->context->strict && list.firstRestricted) {
@@ -6091,6 +6093,7 @@ public:
     {
         ASSERT(this->config.parseSingleFunction);
 
+        this->context->inArrowFunction = true;
         if (this->match(LeftBrace)) {
             return parseFunctionSourceElements();
         }

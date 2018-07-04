@@ -44,24 +44,24 @@ typedef Object* (*NativeFunctionConstructor)(ExecutionState& state, CodeBlock* c
 struct NativeFunctionInfo {
     enum Flags {
         Strict = 1,
-        Consturctor = 1 << 1,
+        Constructor = 1 << 1,
     };
     bool m_isStrict;
-    bool m_isConsturctor;
+    bool m_isConstructor;
     AtomicString m_name;
     NativeFunctionPointer m_nativeFunction;
     NativeFunctionConstructor m_nativeFunctionConstructor;
     size_t m_argumentCount;
 
-    NativeFunctionInfo(AtomicString name, NativeFunctionPointer fn, size_t argc, NativeFunctionConstructor ctor = nullptr, int flags = Flags::Strict | Flags::Consturctor)
+    NativeFunctionInfo(AtomicString name, NativeFunctionPointer fn, size_t argc, NativeFunctionConstructor ctor = nullptr, int flags = Flags::Strict | Flags::Constructor)
         : m_isStrict(flags & Strict)
-        , m_isConsturctor(flags & Consturctor)
+        , m_isConstructor(flags & Constructor)
         , m_name(name)
         , m_nativeFunction(fn)
         , m_nativeFunctionConstructor(ctor)
         , m_argumentCount(argc)
     {
-        if (!m_isConsturctor) {
+        if (!m_isConstructor) {
             ASSERT(ctor == nullptr);
         } else {
             ASSERT(ctor);
@@ -134,9 +134,9 @@ public:
         return m_context;
     }
 
-    bool isConsturctor() const
+    bool isConstructor() const
     {
-        return m_isConsturctor;
+        return m_isConstructor;
     }
 
     bool isClass()
@@ -294,12 +294,12 @@ public:
 
     bool isDefaultConstructorCodeBlock()
     {
-        return m_isConsturctor && m_isClass;
+        return m_isConstructor && m_isClass;
     }
 
     DefaultConstructorCodeBlock* asDefaultConstructorCodeBlock()
     {
-        ASSERT(m_isConsturctor && m_isClass);
+        ASSERT(m_isConstructor && m_isClass);
         return (DefaultConstructorCodeBlock*)this;
     }
 
@@ -318,7 +318,7 @@ protected:
     CodeBlock() {}
     Context* m_context;
 
-    bool m_isConsturctor : 1;
+    bool m_isConstructor : 1;
     bool m_isStrict : 1;
     bool m_hasCallNativeFunctionCode : 1;
     bool m_isFunctionNameSaveOnHeap : 1;
@@ -370,7 +370,8 @@ public:
         m_childBlocks.push_back(cb);
     }
     bool needToStoreThisValue();
-    void captureThisValue();
+    void captureThis();
+    void captureArguments();
     bool tryCaptureIdentifiersFromChildCodeBlock(AtomicString name);
     void notifySelfOrChildHasEvalWithYield();
 
@@ -547,6 +548,16 @@ public:
             }
         }
         return SIZE_MAX;
+    }
+
+    bool hasParameter(const AtomicString& name)
+    {
+        for (size_t i = 0; i < m_parametersInfomation.size(); i++) {
+            if (m_parametersInfomation[i].m_name == name) {
+                return true;
+            }
+        }
+        return false;
     }
 
     const StringView& src()
