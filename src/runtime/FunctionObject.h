@@ -72,6 +72,11 @@ public:
         return m_codeBlock->isConsturctor();
     }
 
+    bool isClass()
+    {
+        return m_codeBlock->isClass();
+    }
+
     virtual bool isFunctionObject() const
     {
         return true;

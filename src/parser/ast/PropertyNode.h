@@ -29,9 +29,12 @@ class PropertyNode : public Node {
 public:
     friend class ScriptParser;
     enum Kind {
+        None,
         Init,
         Get,
-        Set
+        Set,
+        Method,
+        Constructor
     };
 
     PropertyNode(Node* key, Node* value, Kind kind, bool computed)

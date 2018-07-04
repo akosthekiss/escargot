@@ -32,6 +32,7 @@ class ByteCodeBlock;
 class LexicalEnvironment;
 class CodeBlock;
 class InterpretedCodeBlock;
+class DefaultConstructorCodeBlock;
 class Script;
 
 typedef TightVector<InterpretedCodeBlock*, GCUtil::gc_malloc_ignore_off_page_allocator<InterpretedCodeBlock*>> CodeBlockVector;
@@ -138,6 +139,11 @@ public:
         return m_isConsturctor;
     }
 
+    bool isClass()
+    {
+        return m_isClass;
+    }
+
     bool inCatchWith()
     {
         return m_inCatch || m_inWith;
@@ -208,7 +214,7 @@ public:
         return m_needToLoadThisValue;
     }
 
-    void setNeedToLoadThisValue() 
+    void setNeedToLoadThisValue()
     {
         m_needToLoadThisValue = true;
     }
@@ -286,6 +292,17 @@ public:
         return (InterpretedCodeBlock*)this;
     }
 
+    bool isDefaultConstructorCodeBlock()
+    {
+        return m_isConsturctor && m_isClass;
+    }
+
+    DefaultConstructorCodeBlock* asDefaultConstructorCodeBlock()
+    {
+        ASSERT(m_isConsturctor && m_isClass);
+        return (DefaultConstructorCodeBlock*)this;
+    }
+
     CallNativeFunctionData* nativeFunctionData()
     {
         return m_nativeFunctionData;
@@ -325,6 +342,7 @@ protected:
     bool m_isBindedFunction : 1;
     bool m_needsVirtualIDOperation : 1;
     bool m_needToLoadThisValue : 1;
+    bool m_isClass : 1;
     uint16_t m_parameterCount;
 
     AtomicString m_functionName;
@@ -584,6 +602,22 @@ protected:
     ExtendedNodeLOC m_locEnd;
     ASTScopeContext* m_scopeContext;
 #endif
+};
+
+class DefaultConstructorCodeBlock : public InterpretedCodeBlock {
+public:
+    bool hasSuperClass()
+    {
+        return m_hasSuperClass;
+    }
+
+    void* operator new(size_t size);
+    void* operator new[](size_t size) = delete;
+
+    DefaultConstructorCodeBlock(Context* ctx, Node* name, bool hasSuperClass, ExtendedNodeLOC sourceElementStart);
+
+protected:
+    bool m_hasSuperClass;
 };
 }
 

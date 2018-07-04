@@ -278,7 +278,7 @@ public:
     {
     }
 
-     
+
     void generateStoreThisValueByteCode(ByteCodeBlock* block, ByteCodeGenerateContext* context);
     void generateLoadThisValueByteCode(ByteCodeBlock* block, ByteCodeGenerateContext* context);
 

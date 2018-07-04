@@ -132,6 +132,11 @@ enum ASTNodeType {
     TryStatement,
     CatchClause,
     ThrowStatement,
+    MethodDefinition,
+    ClassBody,
+    ClassDeclaration,
+    ClassExpression,
+    Super
 };
 
 struct NodeLOC {

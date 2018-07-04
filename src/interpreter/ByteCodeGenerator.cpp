@@ -107,7 +107,7 @@ void ByteCodeGenerator::generateStoreThisValueByteCode(ByteCodeBlock* block, Byt
     InterpretedCodeBlock* codeBlock = block->m_codeBlock;
     InterpretedCodeBlock::IndexedIdentifierInfo info = codeBlock->indexedIdentifierInfo(codeBlock->context()->staticStrings().stringThis);
     ASSERT(!codeBlock->isGlobalScopeCodeBlock() && codeBlock->canUseIndexedVariableStorage());
-    ASSERT(!context->m_isWithScope); 
+    ASSERT(!context->m_isWithScope);
     ASSERT(info.m_isResultSaved && !info.m_isStackAllocated && !info.m_upperIndex);
 
     size_t cIdx = context->m_catchScopeCount;

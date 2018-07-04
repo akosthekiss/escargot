@@ -49,8 +49,14 @@ public:
         ByteCodeRegisterIndex ret = context->getRegister();
         context->giveUpRegister();
 
+        bool isSuperFunction = m_callee->type() == ASTNodeType::Super;
+        ByteCodeRegisterIndex implicitThisReg;
+        if (isSuperFunction) {
+            implicitThisReg = context->getRegister();
+        }
+
         const unsigned smallAmountOfArguments = 16;
-        if (m_arguments.size() && m_arguments.size() < smallAmountOfArguments) {
+        if (m_arguments.size() && m_arguments.size() < smallAmountOfArguments - (isSuperFunction ? 1 : 0)) {
             ByteCodeRegisterIndex regs[smallAmountOfArguments];
             for (size_t i = 0; i < m_arguments.size(); i++) {
                 regs[i] = m_arguments[i]->getRegister(codeBlock, context);
@@ -58,9 +64,10 @@ public:
 
             bool isSorted = true;
 
-            auto k = regs[0];
-            for (size_t i = 1; i < m_arguments.size(); i++) {
-                if (k + i != regs[i]) {
+            auto k = isSuperFunction ? implicitThisReg : regs[0];
+            size_t add = isSuperFunction ? 1 : 0;
+            for (size_t i = 1 - add; i < m_arguments.size(); i++) {
+                if (k + i + add != regs[i]) {
                     isSorted = false;
                     break;
                 }
@@ -69,6 +76,9 @@ public:
                 context->giveUpRegister();
             }
             if (isSorted) {
+                if (isSuperFunction) {
+                    codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, implicitThisReg), context, this);
+                }
                 for (size_t i = 0; i < m_arguments.size(); i++) {
                     regs[i] = m_arguments[i]->getRegister(codeBlock, context);
                     m_arguments[i]->generateExpressionByteCode(codeBlock, context, regs[i]);
@@ -76,16 +86,25 @@ public:
                 for (size_t i = 0; i < m_arguments.size(); i++) {
                     context->giveUpRegister();
                 }
+                if (isSuperFunction) {
+                    context->giveUpRegister();
+                }
                 return k;
             }
         }
 
+        if (isSuperFunction) {
+            codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, implicitThisReg), context, this);
+        }
         for (size_t i = 0; i < m_arguments.size(); i++) {
             size_t registerExpect = context->getRegister();
             m_arguments[i]->generateExpressionByteCode(codeBlock, context, registerExpect);
         }
 
         for (size_t i = 0; i < m_arguments.size(); i++) {
+            context->giveUpRegister();
+        }
+        if (isSuperFunction) {
             context->giveUpRegister();
         }
 
@@ -164,7 +183,8 @@ public:
         }
 
         bool isCalleeHasReceiver = false;
-        if (m_callee->isMemberExpression()) {
+        bool isSuperFunction = m_callee->type() == ASTNodeType::Super;
+        if (m_callee->isMemberExpression() || isSuperFunction) {
             isCalleeHasReceiver = true;
             context->m_inCallingExpressionScope = true;
             context->m_isHeadOfMemberExpression = true;
@@ -192,7 +212,7 @@ public:
         }
 
         if (isCalleeHasReceiver) {
-            codeBlock->pushCode(CallFunctionWithReceiver(ByteCodeLOC(m_loc.index), receiverIndex, calleeIndex, argumentsStartIndex, m_arguments.size(), dstRegister), context, this);
+            codeBlock->pushCode(CallFunctionWithReceiver(ByteCodeLOC(m_loc.index), receiverIndex, calleeIndex, argumentsStartIndex, m_arguments.size() + (isSuperFunction ? 1 : 0), dstRegister), context, this);
         } else {
             codeBlock->pushCode(CallFunction(ByteCodeLOC(m_loc.index), calleeIndex, argumentsStartIndex, m_arguments.size(), dstRegister), context, this);
         }

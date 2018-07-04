@@ -2530,13 +2530,13 @@ public:
     ErrorHandler* errorHandler;
     Scanner* scanner;
     Scanner scannerInstance;
-    
+
     /*
     std::unordered_map<IdentifierNode*, RefPtr<ScannerResult>,
                        std::hash<IdentifierNode*>, std::equal_to<IdentifierNode*>, GCUtil::gc_malloc_ignore_off_page_allocator<std::pair<IdentifierNode*, RefPtr<ScannerResult>>>>
         nodeExtraInfo;
         */
-        
+
 
     enum SourceType {
         Script,
@@ -4191,9 +4191,7 @@ public:
         if (this->matchKeyword(Super) && this->context->inFunctionBody) {
             MetaNode node = this->createNode();
             this->nextToken();
-            this->throwError("super keyword is not supported yet");
-            RELEASE_ASSERT_NOT_REACHED();
-            // expr = this->finalize(node, new Node.Super());
+            expr = this->finalize(node, new SuperNode(this->match(LeftParenthesis)));
             if (!this->match(LeftParenthesis) && !this->match(Period) && !this->match(LeftSquareBracket)) {
                 this->throwUnexpectedToken(this->lookahead);
             }
@@ -4250,10 +4248,7 @@ public:
             this->throwUnexpectedToken(this->lookahead);
         }
 
-        this->throwError("super keyword is not supported yet");
-        RELEASE_ASSERT_NOT_REACHED();
-        // return this->finalize(node, new Node.Super());
-        return nullptr;
+        return this->finalize(node, new SuperNode());
     }
 
     RefPtr<Node> parseLeftHandSideExpression()
@@ -4878,7 +4873,7 @@ public:
 
                     MetaNode node = this->startNode(startToken);
                     MetaNode nodeStart = this->createNode();
-    
+
                     this->expect(Arrow);
                     RefPtr<Node> body = this->match(LeftBrace) ? this->parseFunctionSourceElements() : this->isolateCoverGrammar(&Parser::parseAssignmentExpression);
                     bool expression = body->type() != BlockStatement;
@@ -5011,6 +5006,9 @@ public:
             switch (this->lookahead->valueKeywordKind) {
             case Function:
                 statement = this->parseFunctionDeclaration();
+                break;
+            case Class:
+                statement = this->parseClassDeclaration();
                 break;
             default:
                 statement = this->parseStatement();
@@ -5865,9 +5863,13 @@ public:
             if (hasLabel(id->name())) {
                 this->throwError(Messages::Redeclaration, new ASCIIString("Label"), id->name().string());
             }
-
             this->context->labelSet.push_back(std::make_pair(id->name(), 0));
-            RefPtr<StatementNode> labeledBody = this->parseStatement(this->context->strict ? false : true);
+            RefPtr<StatementNode> labeledBody;
+            if (this->lookahead->type == KeywordToken && this->lookahead->valueKeywordKind == Class) {
+                labeledBody = asStatementNode(this->parseClassDeclaration());
+            } else {
+                labeledBody = this->parseStatement(this->context->strict ? false : true);
+            }
             removeLabel(id->name());
 
             statement = new LabeledStatementNode(labeledBody.get(), id->name().string());
@@ -6028,6 +6030,7 @@ public:
             case Break:
                 statement = asStatementNode(this->parseBreakStatement());
                 break;
+            case Class:
             case Continue:
                 statement = asStatementNode(this->parseContinueStatement());
                 break;
@@ -6136,6 +6139,36 @@ public:
 
         this->context->inDirectCatchScope = prevInDirectCatchScope;
 
+        return this->finalize(nodeStart, new BlockStatementNode(body.get()));
+    }
+
+    RefPtr<Node> parseDefaultConstructor()
+    {
+        DefaultConstructorCodeBlock* codeBlock = config.parseSingleFunctionTarget->asDefaultConstructorCodeBlock();
+        MetaNode nodeStart = this->createNode();
+        RefPtr<StatementContainer> body = StatementContainer::create();
+        if (codeBlock->hasSuperClass()) {
+            if (!codeBlock->functionName().string()->length()) {
+                // TODO generate constructor for uname
+                RELEASE_ASSERT_NOT_REACHED();
+            }
+            RefPtr<Node> expr;
+            RefPtr<Node> __proto__ = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().__proto__));
+            RefPtr<Node> apply = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().apply));
+            RefPtr<Node> arguments = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().arguments));
+            RefPtr<Node> name = this->finalize(nodeStart, new IdentifierNode(codeBlock->functionName()));
+            expr = this->finalize(nodeStart, new MemberExpressionNode(name.get(), __proto__.get(), true));
+            expr = this->finalize(nodeStart, new MemberExpressionNode(expr.get(), apply.get(), true));
+            ArgumentVector args;
+
+            args.push_back(this->finalize(nodeStart, new ThisExpressionNode()));
+            args.push_back(arguments);
+
+            expr = this->finalize(nodeStart, new CallExpressionNode(expr.get(), std::move(args)));
+            body->appendChild(this->finalize(nodeStart, new ExpressionStatementNode(expr.get())));
+        }
+
+        body->appendChild(this->finalize(nodeStart, new ReturnStatmentNode(nullptr)));
         return this->finalize(nodeStart, new BlockStatementNode(body.get()));
     }
 
@@ -6521,158 +6554,165 @@ public:
     }
 
     // ECMA-262 14.5 Class Definitions
-    /*
-    parseClassElement(hasConstructor): Node.Property {
-        let token = this.lookahead;
-        let node = this.createNode();
+    RefPtr<PropertyNode> parseClassElement(bool& hasConstructor)
+    {
+        RefPtr<ScannerResult> token = this->lookahead;
+        MetaNode node = this->createNode();
 
-        let kind: string;
-        let key: Node.PropertyKey;
-        let value: Node.FunctionExpression;
-        let computed = false;
-        let method = false;
-        let isStatic = false;
+        PropertyNode::Kind kind = PropertyNode::Kind::None;
+        RefPtr<Node> key; //'': Node.PropertyKey;
+        RefPtr<FunctionExpressionNode> value; //: Node.FunctionExpression;
 
-        if (this.match('*')) {
-            this.nextToken();
+        bool computed = false;
+        bool method = false;
+        bool isStatic = false;
+
+        if (this->match(Multiply)) {
+            this->nextToken();
         } else {
-            computed = this.match('[');
-            key = this.parseObjectPropertyKey();
-            const id = <Node.Identifier>key;
-            if (id.name === 'static' && (this.qualifiedPropertyName(this.lookahead) || this.match('*'))) {
-                token = this.lookahead;
+            computed = this->match(LeftSquareBracket);
+            key = this->parseObjectPropertyKey();
+            IdentifierNode* id = key->isIdentifier() ? key->asIdentifier() : nullptr;
+            if (id && id->name() == "static" && (this->qualifiedPropertyName(this->lookahead) || this->match(Multiply))) {
+                token = this->lookahead;
                 isStatic = true;
-                computed = this.match('[');
-                if (this.match('*')) {
-                    this.nextToken();
+                computed = this->match(LeftSquareBracket);
+                if (this->match(Multiply)) {
+                    this->nextToken();
                 } else {
-                    key = this.parseObjectPropertyKey();
+                    key = this->parseObjectPropertyKey();
                 }
             }
         }
-
-        const lookaheadPropertyKey = this.qualifiedPropertyName(this.lookahead);
-        if (token.type === Token.Identifier) {
-            if (token.value === 'get' && lookaheadPropertyKey) {
-                kind = 'get';
-                computed = this.match('[');
-                key = this.parseObjectPropertyKey();
-                this.context.allowYield = false;
-                value = this.parseGetterMethod();
-            } else if (token.value === 'set' && lookaheadPropertyKey) {
-                kind = 'set';
-                computed = this.match('[');
-                key = this.parseObjectPropertyKey();
-                value = this.parseSetterMethod();
+        bool lookaheadPropertyKey = this->qualifiedPropertyName(this->lookahead);
+        if (token->type == Token::IdentifierToken) {
+            if (token->relatedSource() == "get" && lookaheadPropertyKey) {
+                kind = PropertyNode::Kind::Get;
+                computed = this->match(LeftSquareBracket);
+                key = this->parseObjectPropertyKey();
+                this->context->allowYield = false;
+                value = this->parseGetterMethod();
+            } else if (token->relatedSource() == "set" && lookaheadPropertyKey) {
+                kind = PropertyNode::Kind::Set;
+                computed = this->match(LeftSquareBracket);
+                key = this->parseObjectPropertyKey();
+                value = this->parseSetterMethod();
             }
-        } else if (token.type === Token.Punctuator && token.value === '*' && lookaheadPropertyKey) {
-            kind = 'init';
-            computed = this.match('[');
-            key = this.parseObjectPropertyKey();
-            value = this.parseGeneratorMethod();
+        } else if (token->type == Token::PunctuatorToken && token->relatedSource() == "*" && lookaheadPropertyKey) {
+            kind = PropertyNode::Kind::Init;
+            computed = this->match(LeftSquareBracket);
+            key = this->parseObjectPropertyKey();
+            value = this->parseGeneratorMethod();
+            method = true;
+        }
+        if (kind == PropertyNode::Kind::None && key && this->match(LeftParenthesis)) {
+            kind = PropertyNode::Kind::Init;
+            value = this->parsePropertyMethodFunction();
             method = true;
         }
 
-        if (!kind && key && this.match('(')) {
-            kind = 'init';
-            value = this.parsePropertyMethodFunction();
-            method = true;
+        if (kind == PropertyNode::Kind::None) {
+            this->throwUnexpectedToken(this->lookahead);
         }
 
-        if (!kind) {
-            this.throwUnexpectedToken(this.lookahead);
-        }
-
-        if (kind === 'init') {
-            kind = 'method';
+        if (kind == PropertyNode::Kind::Init) {
+            kind = PropertyNode::Kind::Method;
         }
 
         if (!computed) {
-            if (isStatic && this.isPropertyKey(key, 'prototype')) {
-                this.throwUnexpectedToken(token, Messages.StaticPrototype);
+            if (isStatic && this->isPropertyKey(key.get(), "prototype")) {
+                this->throwUnexpectedToken(token, Messages::StaticPrototype);
             }
-            if (!isStatic && this.isPropertyKey(key, 'constructor')) {
-                if (kind !== 'method' || !method || value.generator) {
-                    this.throwUnexpectedToken(token, Messages.ConstructorSpecialMethod);
+            if (!isStatic && this->isPropertyKey(key.get(), "constructor")) {
+                if (kind != PropertyNode::Kind::Method || !method || value->function().isGenerator()) {
+                    this->throwUnexpectedToken(token, Messages::ConstructorSpecialMethod);
                 }
-                if (hasConstructor.value) {
-                    this.throwUnexpectedToken(token, Messages.DuplicateConstructor);
+                if (hasConstructor) {
+                    throwUnexpectedToken(token, Messages::DuplicateConstructor);
                 } else {
-                    hasConstructor.value = true;
+                    hasConstructor = true;
                 }
-                kind = 'constructor';
+                kind = PropertyNode::Kind::Constructor;
             }
         }
-
-
-        return this.finalize(node, new Node.MethodDefinition(key, computed, value, kind, isStatic));
+        return this->finalize(node, new MethodDefinitionNode(key.get(), computed, value.get(), kind, isStatic));
     }
 
-    parseClassElementList(): Node.Property[] {
-        const body = [];
-        let hasConstructor = { value: false };
+    PropertiesNodeVector parseClassElementList()
+    {
+        PropertiesNodeVector body;
+        bool hasConstructor = false;
 
-        this.expect('{');
-        while (!this.match('}')) {
-            if (this.match(';')) {
-                this.nextToken();
+        this->expect(LeftBrace);
+        while (!this->match(RightBrace)) {
+            if (this->match(SemiColon)) {
+                this->nextToken();
             } else {
-                body.push(this.parseClassElement(hasConstructor));
+                body.push_back(this->parseClassElement(hasConstructor));
             }
         }
-        this.expect('}');
-
+        this->expect(RightBrace);
         return body;
     }
 
-    parseClassBody(): Node.ClassBody {
-        const node = this.createNode();
-        const elementList = this.parseClassElementList();
-
-        return this.finalize(node, new Node.ClassBody(elementList));
-    }
-
-    parseClassDeclaration(identifierIsOptional?: boolean): Node.ClassDeclaration {
-        const node = this.createNode();
-
-        const previousStrict = this.context.strict;
-        this.context.strict = true;
-        this.expectKeyword('class');
-
-        const id = (identifierIsOptional && (this.lookahead.type !== Token.Identifier)) ? null : this.parseVariableIdentifier();
-        let superClass = null;
-        if (this.matchKeyword('extends')) {
-            this.nextToken();
-            superClass = this.isolateCoverGrammar(this.parseLeftHandSideExpressionAllowCall);
-        }
-        const classBody = this.parseClassBody();
-        this.context.strict = previousStrict;
-
-        return this.finalize(node, new Node.ClassDeclaration(id, superClass, classBody));
-    }
-
-    parseClassExpression(): Node.ClassExpression {
-        const node = this.createNode();
-
-        const previousStrict = this.context.strict;
-        this.context.strict = true;
-        this.expectKeyword('class');
-        const id = (this.lookahead.type === Token.Identifier) ? this.parseVariableIdentifier() : null;
-        let superClass = null;
-        if (this.matchKeyword('extends')) {
-            this.nextToken();
-            superClass = this.isolateCoverGrammar(this.parseLeftHandSideExpressionAllowCall);
-        }
-        const classBody = this.parseClassBody();
-        this.context.strict = previousStrict;
-
-        return this.finalize(node, new Node.ClassExpression(id, superClass, classBody));
-    }
-    */
-    Node* parseClassExpression()
+    RefPtr<ClassBodyNode> parseClassBody()
     {
-        this->throwError("class keyword is not supported yet");
-        RELEASE_ASSERT_NOT_REACHED();
+        MetaNode node = this->createNode();
+        PropertiesNodeVector elementList = this->parseClassElementList();
+
+        return this->finalize(node, new ClassBodyNode(std::move(elementList)));
+    }
+
+    RefPtr<ClassDeclarationNode> parseClassDeclaration(bool identifierIsOptional = false)
+    {
+        MetaNode node = this->createNode();
+
+        const bool previousStrict = this->context->strict;
+        this->context->strict = true;
+        this->expectKeyword(Class);
+
+        RefPtr<IdentifierNode> id = (identifierIsOptional && (this->lookahead->type != Token::IdentifierToken)) ? nullptr : this->parseVariableIdentifier();
+
+        if (id) {
+            scopeContexts.back()->insertName(id->name(), true);
+            scopeContexts.back()->insertUsingName(id->name());
+        }
+
+        RefPtr<Node> superClass = nullptr;
+        if (this->matchKeyword(KeywordKind::Extends)) {
+            this->nextToken();
+            superClass = this->isolateCoverGrammar(&Parser::parseLeftHandSideExpressionAllowCall);
+        }
+
+        RefPtr<ClassBodyNode> classBody = this->parseClassBody();
+        this->context->strict = previousStrict;
+
+        return this->finalize(node, new ClassDeclarationNode(id.get(), superClass.get(), classBody.get()));
+    }
+
+    RefPtr<ClassExpressionNode> parseClassExpression()
+    {
+        MetaNode node = this->createNode();
+
+        const bool previousStrict = this->context->strict;
+        this->context->strict = true;
+        this->expectKeyword(Class);
+        RefPtr<IdentifierNode> id = (this->lookahead->type == Token::IdentifierToken) ? this->parseVariableIdentifier() : nullptr;
+
+        if (id) {
+            scopeContexts.back()->insertName(id->name(), false);
+            scopeContexts.back()->insertUsingName(id->name());
+        }
+
+        RefPtr<Node> superClass = nullptr;
+        if (this->matchKeyword(KeywordKind::Extends)) {
+            this->nextToken();
+            superClass = this->isolateCoverGrammar(&Parser::parseLeftHandSideExpressionAllowCall);
+        }
+        RefPtr<ClassBodyNode> classBody = this->parseClassBody();
+        this->context->strict = previousStrict;
+
+        return this->finalize(node, new ClassExpressionNode(id.get(), superClass.get(), classBody.get()));
     }
 
     // ECMA-262 15.1 Scripts
@@ -6952,6 +6992,8 @@ std::tuple<RefPtr<Node>, ASTScopeContext*> parseSingleFunction(::Escargot::Conte
     RefPtr<Node> nd;
     if (codeBlock->isArrowFunctionExpression()) {
         nd = parser.parseArrowFunctionSourceElements();
+    } else if (codeBlock->isDefaultConstructorCodeBlock()) {
+        nd = parser.parseDefaultConstructor();
     } else {
         nd = parser.parseFunctionSourceElements();
     }

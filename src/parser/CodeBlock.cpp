@@ -23,6 +23,7 @@
 #include "interpreter/ByteCode.h"
 #include "runtime/Environment.h"
 #include "runtime/EnvironmentRecord.h"
+#include "parser/ast/IdentifierNode.h"
 
 namespace Escargot {
 
@@ -70,6 +71,31 @@ void* InterpretedCodeBlock::operator new(size_t size)
 #endif
 }
 
+void* DefaultConstructorCodeBlock::operator new(size_t size)
+{
+#ifdef GC_DEBUG
+    return CustomAllocator<DefaultConstructorCodeBlock>().allocate(1);
+#else
+    static bool typeInited = false;
+    static GC_descr descr;
+    if (!typeInited) {
+        GC_word obj_bitmap[GC_BITMAP_SIZE(DefaultConstructorCodeBlock)] = { 0 };
+        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_context));
+        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_script));
+        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_identifierInfos));
+        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_parametersInfomation));
+        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_parentCodeBlock));
+        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_childBlocks));
+        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_byteCodeBlock));
+#ifndef NDEBUG
+        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_scopeContext));
+#endif
+        descr = GC_make_descriptor(obj_bitmap, GC_WORD_LEN(DefaultConstructorCodeBlock));
+        typeInited = true;
+    }
+    return GC_MALLOC_EXPLICITLY_TYPED(size, descr);
+#endif
+}
 CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     : m_context(ctx)
     , m_nativeFunctionData(nullptr)
@@ -627,5 +653,16 @@ void InterpretedCodeBlock::computeVariables()
         m_identifierOnStackCount = s;
         m_identifierOnHeapCount = h;
     }
+}
+
+DefaultConstructorCodeBlock::DefaultConstructorCodeBlock(Context* ctx, Node* name, bool hasSuperClass, ExtendedNodeLOC sourceElementStart)
+    : InterpretedCodeBlock(ctx, nullptr, StringView(), sourceElementStart, true, AtomicString(), AtomicStringTightVector(), ASTScopeContextNameInfoVector(), nullptr, CodeBlockInitFlag::CodeBlockIsFunctionExpression)
+    , m_hasSuperClass(hasSuperClass)
+{
+    if (name && name->isIdentifier()) {
+        m_functionName = name->asIdentifier()->name();
+    }
+    m_isConsturctor = true;
+    m_isClass = true;
 }
 }

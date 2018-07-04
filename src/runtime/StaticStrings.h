@@ -39,6 +39,7 @@ namespace Escargot {
     F(__defineSetter__)           \
     F(__lookupGetter__)           \
     F(__lookupSetter__)           \
+    F(key)                        \
     F(value)                      \
     F(writable)                   \
     F(enumerable)                 \
