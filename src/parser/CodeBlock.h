@@ -32,7 +32,6 @@ class ByteCodeBlock;
 class LexicalEnvironment;
 class CodeBlock;
 class InterpretedCodeBlock;
-class DefaultConstructorCodeBlock;
 class Script;
 
 typedef TightVector<InterpretedCodeBlock*, GCUtil::gc_malloc_ignore_off_page_allocator<InterpretedCodeBlock*>> CodeBlockVector;
@@ -144,6 +143,11 @@ public:
         return m_isClass;
     }
 
+    bool hasSuperClass()
+    {
+        return m_hasSuperClass;
+    }
+
     bool inCatchWith()
     {
         return m_inCatch || m_inWith;
@@ -229,6 +233,11 @@ public:
         return m_usesArgumentsObject;
     }
 
+    void setFunctionName(AtomicString name)
+    {
+        m_functionName = name;
+    }
+
     AtomicString functionName() const
     {
         return m_functionName;
@@ -292,15 +301,9 @@ public:
         return (InterpretedCodeBlock*)this;
     }
 
-    bool isDefaultConstructorCodeBlock()
+    bool isDefaultConstructorCodeBlock() const
     {
         return m_isConstructor && m_isClass;
-    }
-
-    DefaultConstructorCodeBlock* asDefaultConstructorCodeBlock()
-    {
-        ASSERT(m_isConstructor && m_isClass);
-        return (DefaultConstructorCodeBlock*)this;
     }
 
     CallNativeFunctionData* nativeFunctionData()
@@ -343,6 +346,8 @@ protected:
     bool m_needsVirtualIDOperation : 1;
     bool m_needToLoadThisValue : 1;
     bool m_isClass : 1;
+    bool m_isDefaultConstructor : 1;
+    bool m_hasSuperClass : 1;
     uint16_t m_parameterCount;
 
     AtomicString m_functionName;
@@ -360,6 +365,7 @@ class InterpretedCodeBlock : public CodeBlock {
     friend class ByteCodeGenerator;
     friend class FunctionObject;
     friend class ByteCodeInterpreter;
+    friend class ClassExpressionNode;
 
     friend int getValidValueInInterpretedCodeBlock(void* ptr, GC_mark_custom_result* arr);
 
@@ -595,6 +601,8 @@ protected:
     InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags);
     // init function codeBlock
     InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, AtomicString functionName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags);
+    // default constructor
+    InterpretedCodeBlock(Context* ctx, Script* script, Node* name, bool hasSuperClass, InterpretedCodeBlock* parentBlock, ExtendedNodeLOC sourceElementStart);
 
     Script* m_script;
     StringView m_src; // function source elements src
@@ -613,22 +621,6 @@ protected:
     ExtendedNodeLOC m_locEnd;
     ASTScopeContext* m_scopeContext;
 #endif
-};
-
-class DefaultConstructorCodeBlock : public InterpretedCodeBlock {
-public:
-    bool hasSuperClass()
-    {
-        return m_hasSuperClass;
-    }
-
-    void* operator new(size_t size);
-    void* operator new[](size_t size) = delete;
-
-    DefaultConstructorCodeBlock(Context* ctx, Node* name, bool hasSuperClass, ExtendedNodeLOC sourceElementStart);
-
-protected:
-    bool m_hasSuperClass;
 };
 }
 

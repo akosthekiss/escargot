@@ -24,6 +24,7 @@
 #include "IdentifierNode.h"
 #include "PatternNode.h"
 #include "MemberExpressionNode.h"
+#include "ClassExpressionNode.h"
 
 namespace Escargot {
 
@@ -37,6 +38,13 @@ public:
     {
         m_left = left;
         m_right = right;
+
+        if (m_right->type() == ASTNodeType::ClassExpression) {
+            ClassExpressionNode* classNode = static_cast<ClassExpressionNode*>(m_right.get());
+            if (m_left->isIdentifier()) {
+                classNode->setTargetId(m_left->asIdentifier());
+            }
+        }
     }
 
     virtual ~AssignmentExpressionSimpleNode()
@@ -73,6 +81,21 @@ public:
         return isSlowMode;
     }
 
+    void generateClassIdAssignment(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context)
+    {
+        if (m_right->type() != ASTNodeType::ClassExpression) {
+            return;
+        }
+        ClassExpressionNode* classNode = static_cast<ClassExpressionNode*>(m_right.get());
+        if (!classNode->id() || classNode->id() == classNode->targetId()) {
+            return;
+        }
+        RefPtr<AssignmentExpressionSimpleNode> assign = adoptRef(new AssignmentExpressionSimpleNode(classNode->id(), m_left.get()));
+        assign->m_loc = loc();
+        assign->generateResultNotRequiredExpressionByteCode(codeBlock, context);
+        assign->giveupChildren();
+    }
+
     virtual void generateExpressionByteCode(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeRegisterIndex dstRegister)
     {
         bool isSlowMode = hasSlowAssigmentOperation(m_left.get(), m_right.get());
@@ -93,12 +116,12 @@ public:
             m_right->generateExpressionByteCode(codeBlock, context, rightRegister);
             m_left->generateStoreByteCode(codeBlock, context, rightRegister, false);
         }
+        generateClassIdAssignment(codeBlock, context);
     }
 
     virtual void generateResultNotRequiredExpressionByteCode(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context)
     {
         bool isSlowMode = hasSlowAssigmentOperation(m_left.get(), m_right.get());
-
         if (isSlowMode) {
             size_t rightRegister = m_right->getRegister(codeBlock, context);
             bool canSkipCopyToRegister = context->m_canSkipCopyToRegister;
@@ -110,6 +133,7 @@ public:
             m_right->generateExpressionByteCode(codeBlock, context, rightRegister);
             m_left->generateStoreByteCode(codeBlock, context, rightRegister, false);
             context->giveUpRegister();
+            generateClassIdAssignment(codeBlock, context);
         } else {
             auto rt = m_right->type();
             if (m_left->isIdentifier() && (rt != ASTNodeType::ArrayExpression && rt != ASTNodeType::ObjectExpression) && !context->m_isGlobalScope && !context->m_isEvalCode) {
@@ -126,6 +150,7 @@ public:
                     context->pushRegister(r.second);
                     m_right->generateExpressionByteCode(codeBlock, context, r.second);
                     context->giveUpRegister();
+                    generateClassIdAssignment(codeBlock, context);
                     return;
                 }
             }
@@ -135,6 +160,7 @@ public:
             m_right->generateExpressionByteCode(codeBlock, context, rightRegister);
             m_left->generateStoreByteCode(codeBlock, context, rightRegister, false);
             context->giveUpRegister();
+            generateClassIdAssignment(codeBlock, context);
         }
     }
 

@@ -126,7 +126,9 @@ static Value builtinFunctionToString(ExecutionState& state, Value thisValue, siz
     }
 
     builder.appendString(") ");
-    if (fn->codeBlock()->isInterpretedCodeBlock() && fn->codeBlock()->asInterpretedCodeBlock()->script()) {
+    if (fn->isClass()) {
+        // TODO set proper string
+    } else if (fn->codeBlock()->isInterpretedCodeBlock() && fn->codeBlock()->asInterpretedCodeBlock()->script()) {
         StringView src = fn->codeBlock()->asInterpretedCodeBlock()->src();
         while (src[src.length() - 1] != '}') {
             src = StringView(src, 0, src.length() - 1);

@@ -71,31 +71,6 @@ void* InterpretedCodeBlock::operator new(size_t size)
 #endif
 }
 
-void* DefaultConstructorCodeBlock::operator new(size_t size)
-{
-#ifdef GC_DEBUG
-    return CustomAllocator<DefaultConstructorCodeBlock>().allocate(1);
-#else
-    static bool typeInited = false;
-    static GC_descr descr;
-    if (!typeInited) {
-        GC_word obj_bitmap[GC_BITMAP_SIZE(DefaultConstructorCodeBlock)] = { 0 };
-        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_context));
-        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_script));
-        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_identifierInfos));
-        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_parametersInfomation));
-        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_parentCodeBlock));
-        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_childBlocks));
-        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_byteCodeBlock));
-#ifndef NDEBUG
-        GC_set_bit(obj_bitmap, GC_WORD_OFFSET(DefaultConstructorCodeBlock, m_scopeContext));
-#endif
-        descr = GC_make_descriptor(obj_bitmap, GC_WORD_LEN(DefaultConstructorCodeBlock));
-        typeInited = true;
-    }
-    return GC_MALLOC_EXPLICITLY_TYPED(size, descr);
-#endif
-}
 CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     : m_context(ctx)
     , m_nativeFunctionData(nullptr)
@@ -120,6 +95,8 @@ CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     m_isBindedFunction = false;
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
+    m_isClass = false;
+    m_hasSuperClass = false;
 
     m_parameterCount = info.m_argumentCount;
 
@@ -156,6 +133,8 @@ CodeBlock::CodeBlock(Context* ctx, AtomicString name, size_t argc, bool isStrict
     m_needToLoadThisValue = false;
     m_parameterCount = argc;
     m_nativeFunctionData = info;
+    m_isClass = false;
+    m_hasSuperClass = false;
 }
 
 static Value functionBindImpl(ExecutionState& state, Value thisValue, size_t calledArgc, Value* calledArgv, bool isNewExpression)
@@ -208,6 +187,8 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     m_isBindedFunction = true;
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
+    m_isClass = false;
+    m_hasSuperClass = false;
 
     size_t targetFunctionLength = targetCodeBlock->parameterCount();
     m_parameterCount = targetFunctionLength > boundArgc ? targetFunctionLength - boundArgc : 0;
@@ -299,6 +280,8 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isBindedFunction = false;
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
+    m_isClass = false;
+    m_hasSuperClass = false;
 
     for (size_t i = 0; i < innerIdentifiers.size(); i++) {
         IdentifierInfo info;
@@ -432,6 +415,8 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isBindedFunction = false;
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
+    m_isClass = false;
+    m_hasSuperClass = false;
 }
 
 bool InterpretedCodeBlock::needToStoreThisValue()
@@ -693,14 +678,16 @@ void InterpretedCodeBlock::computeVariables()
     }
 }
 
-DefaultConstructorCodeBlock::DefaultConstructorCodeBlock(Context* ctx, Node* name, bool hasSuperClass, ExtendedNodeLOC sourceElementStart)
-    : InterpretedCodeBlock(ctx, nullptr, StringView(), sourceElementStart, true, AtomicString(), AtomicStringTightVector(), ASTScopeContextNameInfoVector(), nullptr, CodeBlockInitFlag::CodeBlockIsFunctionExpression)
-    , m_hasSuperClass(hasSuperClass)
+InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, Node* name, bool hasSuperClass, InterpretedCodeBlock* parentBlock, ExtendedNodeLOC sourceElementStart)
+    : InterpretedCodeBlock(ctx, script, StringView(), sourceElementStart, true, AtomicString(), AtomicStringTightVector(), ASTScopeContextNameInfoVector(), parentBlock, CodeBlockInitFlag::CodeBlockIsFunctionExpression)
 {
     if (name && name->isIdentifier()) {
         m_functionName = name->asIdentifier()->name();
     }
     m_isConstructor = true;
     m_isClass = true;
+    m_hasSuperClass = hasSuperClass;
+    captureArguments();
+    computeVariables();
 }
 }

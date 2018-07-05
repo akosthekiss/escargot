@@ -22,22 +22,23 @@
 
 #include "runtime/VMInstance.h"
 #include "parser/esprima_cpp/esprima.h"
-#include "parser/ast/ProgramNode.h"
-#include "parser/ast/LiteralNode.h"
-#include "parser/ast/SequenceExpressionNode.h"
+#include "ProgramNode.h"
+#include "LiteralNode.h"
+#include "SequenceExpressionNode.h"
+#include "ClassBodyNode.h"
 
 namespace Escargot {
 
 class ClassExpressionNode : public ExpressionNode {
 public:
     friend class ScriptParser;
-    ClassExpressionNode(IdentifierNode* id, Node* superClass, ClassBodyNode* body, bool fromDecl = false)
+    ClassExpressionNode(IdentifierNode* id, Node* superClass, ClassBodyNode* body)
         : ExpressionNode()
     {
         m_id = id;
         m_superClass = superClass;
         m_body = body;
-        m_fromDecl = fromDecl;
+        m_targetId = nullptr;
     }
 
     virtual ~ClassExpressionNode()
@@ -48,13 +49,53 @@ public:
     void generateEmptyConstructor(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeRegisterIndex dstRegister)
     {
         Context* ctx = codeBlock->m_codeBlock->context();
-        DefaultConstructorCodeBlock* blk = new DefaultConstructorCodeBlock(ctx, id(), superClass() ? true : false, ExtendedNodeLOC(0, 0, m_loc.index));
+        InterpretedCodeBlock* currentBlk = context->m_codeBlock->asInterpretedCodeBlock();
+        InterpretedCodeBlock* blk = new InterpretedCodeBlock(ctx, currentBlk->script(), id() ? id() : targetId(), superClass() ? true : false, currentBlk, ExtendedNodeLOC(0, 0, m_loc.index));
         codeBlock->pushCode(CreateFunction(ByteCodeLOC(m_loc.index), dstRegister, blk), context, this);
     }
 
+    void definePropertyMethod(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, MethodDefinitionNode* m, String* keyString, ByteCodeRegisterIndex targetRegister, ByteCodeRegisterIndex valueRegister)
+    {
+        Context* ctx = codeBlock->m_codeBlock->context();
+        codeBlock->m_literalData.pushBack(keyString);
+        if (m && m->kind() == PropertyNode::Kind::Get) {
+            size_t propertyRegister = context->getRegister();
+            codeBlock->pushCode(LoadLiteral(ByteCodeLOC(m->m_loc.index), propertyRegister, keyString), context, this);
+            codeBlock->pushCode(ObjectDefineGetter(ByteCodeLOC(m->m_loc.index), targetRegister, propertyRegister, valueRegister), context, this);
+            context->giveUpRegister();
+        } else if (m && m->kind() == PropertyNode::Kind::Set) {
+            size_t propertyRegister = context->getRegister();
+            codeBlock->pushCode(LoadLiteral(ByteCodeLOC(m->m_loc.index), propertyRegister, keyString), context, this);
+            codeBlock->pushCode(ObjectDefineSetter(ByteCodeLOC(m->m_loc.index), targetRegister, propertyRegister, valueRegister), context, this);
+            context->giveUpRegister();
+
+        } else {
+            size_t defineRegister = context->getRegister();
+            size_t keyRegister = context->getRegister();
+            size_t descriptReigster = context->getRegister();
+            size_t funcRegister = context->getRegister();
+            size_t objectRegister = context->getRegister();
+
+            codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), targetRegister, defineRegister), context, this);
+            codeBlock->pushCode(GetGlobalObject(ByteCodeLOC(m_loc.index), objectRegister, ctx->staticStrings().Object), context, this);
+            codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), objectRegister, funcRegister, ctx->staticStrings().defineProperty), context, this);
+            codeBlock->pushCode(LoadLiteral(ByteCodeLOC(m ? m->m_loc.index : m_loc.index), keyRegister, keyString), context, this);
+            codeBlock->pushCode(CreateObject(ByteCodeLOC(m_loc.index), descriptReigster), context, this);
+            codeBlock->pushCode(ObjectDefineOwnPropertyWithNameOperation(ByteCodeLOC(m_loc.index), descriptReigster, ctx->staticStrings().key, keyRegister), context, this);
+            codeBlock->pushCode(ObjectDefineOwnPropertyWithNameOperation(ByteCodeLOC(m_loc.index), descriptReigster, ctx->staticStrings().value, valueRegister), context, this);
+            codeBlock->pushCode(CallFunctionWithReceiver(ByteCodeLOC(m_loc.index), objectRegister, funcRegister, defineRegister, 3, descriptReigster), context, this);
+
+            context->giveUpRegister();
+            context->giveUpRegister();
+            context->giveUpRegister();
+            context->giveUpRegister();
+            context->giveUpRegister();
+        }
+    }
+
+
     virtual void generateExpressionByteCode(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeRegisterIndex dstRegister)
     {
-        size_t before = context->m_registerStack->size();
         Context* ctx = codeBlock->m_codeBlock->context();
         bool hasProtoMember = false;
         bool hasConstructor = false;
@@ -65,6 +106,7 @@ public:
         for (size_t i = 0; i < body.size(); i++) {
             MethodDefinitionNode* m = static_cast<MethodDefinitionNode*>(body[i].get());
             if (m->kind() == PropertyNode::Kind::Constructor) {
+                m->setName(id() ? id() : targetId());
                 m->generateExpressionByteCode(codeBlock, context, dstRegister);
                 hasConstructor = true;
             } else {
@@ -89,6 +131,8 @@ public:
         if (!hasConstructor) {
             generateEmptyConstructor(codeBlock, context, dstRegister);
         }
+
+
         if (super) {
             size_t superProtoRegister = context->getRegister();
             size_t superRegister = context->getRegister();
@@ -126,16 +170,19 @@ public:
             context->giveUpRegister();
         }
 
-        if (hasProtoMember) {
-            protoRegister = context->getRegister();
-            codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), dstRegister, protoRegister, codeBlock->m_codeBlock->context()->staticStrings().prototype), context, this);
-            regSize++;
+        protoRegister = context->getRegister();
+        codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), dstRegister, protoRegister, codeBlock->m_codeBlock->context()->staticStrings().prototype), context, this);
+        regSize++;
+
+        if (!hasConstructor) {
+            definePropertyMethod(codeBlock, context, nullptr, ctx->staticStrings().constructor.string(), protoRegister, dstRegister);
         }
 
         size_t regIdx = regSize;
         for (size_t i = 0; i < body.size(); i++) {
             MethodDefinitionNode* m = static_cast<MethodDefinitionNode*>(body[i].get());
             if (m->kind() == PropertyNode::Kind::Constructor) {
+                definePropertyMethod(codeBlock, context, m, ctx->staticStrings().constructor.string(), protoRegister, dstRegister);
                 continue;
             }
 
@@ -147,6 +194,7 @@ public:
             }
 
             size_t valueRegister = context->getLastRegisterIndex(--regIdx);
+
             String* keyString;
             if (m->key()->isIdentifier()) {
                 keyString = m->key()->asIdentifier()->name().string();
@@ -163,52 +211,16 @@ public:
                     // TODO check possible types and support other types of name
                     RELEASE_ASSERT_NOT_REACHED();
                 }
-            }
-
-            if (m->kind() == PropertyNode::Kind::Get) {
-                size_t propertyRegister = context->getRegister();
-                codeBlock->pushCode(LoadLiteral(ByteCodeLOC(m->m_loc.index), propertyRegister, keyString), context, this);
-                codeBlock->pushCode(ObjectDefineGetter(ByteCodeLOC(m->m_loc.index), targetRegister, propertyRegister, valueRegister), context, this);
-                context->giveUpRegister();
-            } else if (m->kind() == PropertyNode::Kind::Set) {
-                size_t propertyRegister = context->getRegister();
-                codeBlock->pushCode(LoadLiteral(ByteCodeLOC(m->m_loc.index), propertyRegister, keyString), context, this);
-                codeBlock->pushCode(ObjectDefineSetter(ByteCodeLOC(m->m_loc.index), targetRegister, propertyRegister, valueRegister), context, this);
-                context->giveUpRegister();
             } else {
-                size_t defineRegister = context->getRegister();
-                size_t keyRegister = context->getRegister();
-                size_t descriptReigster = context->getRegister();
-                size_t funcRegister = context->getRegister();
-                size_t objectRegister = context->getRegister();
-
-                codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), targetRegister, defineRegister), context, this);
-                codeBlock->pushCode(GetGlobalObject(ByteCodeLOC(m_loc.index), objectRegister, ctx->staticStrings().Object), context, this);
-                codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), objectRegister, funcRegister, ctx->staticStrings().defineProperty), context, this);
-                codeBlock->pushCode(LoadLiteral(ByteCodeLOC(m->m_loc.index), keyRegister, keyString), context, this);
-                codeBlock->pushCode(CreateObject(ByteCodeLOC(m_loc.index), descriptReigster), context, this);
-                codeBlock->pushCode(ObjectDefineOwnPropertyWithNameOperation(ByteCodeLOC(m_loc.index), descriptReigster, ctx->staticStrings().key, keyRegister), context, this);
-                codeBlock->pushCode(ObjectDefineOwnPropertyWithNameOperation(ByteCodeLOC(m_loc.index), descriptReigster, ctx->staticStrings().value, valueRegister), context, this);
-                codeBlock->pushCode(CallFunctionWithReceiver(ByteCodeLOC(m_loc.index), objectRegister, funcRegister, defineRegister, 3, descriptReigster), context, this);
-
-                context->giveUpRegister();
-                context->giveUpRegister();
-                context->giveUpRegister();
-                context->giveUpRegister();
-                context->giveUpRegister();
+                ASSERT_NOT_REACHED();
             }
-        }
 
-        if (!m_fromDecl && id() && id()->isIdentifier()) {
-            id()->generateResolveAddressByteCode(codeBlock, context);
-            id()->generateStoreByteCode(codeBlock, context, dstRegister, false);
+            definePropertyMethod(codeBlock, context, m, keyString, targetRegister, valueRegister);
         }
-
 
         for (size_t i = 0; i < regSize; i++) {
             context->giveUpRegister();
         }
-        ASSERT(context->m_registerStack->size() == before);
     }
 
     inline IdentifierNode* id()
@@ -226,11 +238,21 @@ public:
         return m_body.get();
     }
 
+    inline void setTargetId(IdentifierNode* id)
+    {
+        m_targetId = id;
+    }
+
+    inline IdentifierNode* targetId()
+    {
+        return m_targetId.get();
+    }
+
 protected:
     RefPtr<IdentifierNode> m_id;
+    RefPtr<IdentifierNode> m_targetId;
     RefPtr<Node> m_superClass;
     RefPtr<ClassBodyNode> m_body;
-    bool m_fromDecl;
 };
 }
 

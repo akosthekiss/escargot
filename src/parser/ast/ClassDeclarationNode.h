@@ -24,6 +24,7 @@
 #include "IdentifierNode.h"
 #include "ClassBodyNode.h"
 #include "ClassExpressionNode.h"
+#include "AssignmentExpressionSimpleNode.h"
 
 namespace Escargot {
 
@@ -32,7 +33,7 @@ public:
     friend class ScriptParser;
     ClassDeclarationNode(IdentifierNode* id, Node* superClass, ClassBodyNode* body)
     {
-        m_node = adoptRef(new ClassExpressionNode(id, superClass, body, true));
+        m_node = adoptRef(new ClassExpressionNode(id, superClass, body));
     }
 
     virtual ~ClassDeclarationNode()

@@ -6147,26 +6147,25 @@ public:
 
     RefPtr<Node> parseDefaultConstructor()
     {
-        DefaultConstructorCodeBlock* codeBlock = config.parseSingleFunctionTarget->asDefaultConstructorCodeBlock();
+        InterpretedCodeBlock* currentTarget = config.parseSingleFunctionTarget->asInterpretedCodeBlock();
         MetaNode nodeStart = this->createNode();
         RefPtr<StatementContainer> body = StatementContainer::create();
-        if (codeBlock->hasSuperClass()) {
-            if (!codeBlock->functionName().string()->length()) {
-                // TODO generate constructor for uname
-                RELEASE_ASSERT_NOT_REACHED();
-            }
+        if (currentTarget->hasSuperClass()) {
             RefPtr<Node> expr;
+            RefPtr<Node> thisNode = this->finalize(nodeStart, new ThisExpressionNode());
             RefPtr<Node> __proto__ = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().__proto__));
+            RefPtr<Node> constructor = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().constructor));
             RefPtr<Node> apply = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().apply));
             RefPtr<Node> arguments = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().arguments));
-            RefPtr<Node> name = this->finalize(nodeStart, new IdentifierNode(codeBlock->functionName()));
-            expr = this->finalize(nodeStart, new MemberExpressionNode(name.get(), __proto__.get(), true));
+
+            expr = this->finalize(nodeStart, new MemberExpressionNode(thisNode.get(), __proto__.get(), true));
+            expr = this->finalize(nodeStart, new MemberExpressionNode(expr.get(), constructor.get(), true));
+            expr = this->finalize(nodeStart, new MemberExpressionNode(expr.get(), __proto__.get(), true));
             expr = this->finalize(nodeStart, new MemberExpressionNode(expr.get(), apply.get(), true));
+
             ArgumentVector args;
-
-            args.push_back(this->finalize(nodeStart, new ThisExpressionNode()));
+            args.push_back(thisNode);
             args.push_back(arguments);
-
             expr = this->finalize(nodeStart, new CallExpressionNode(expr.get(), std::move(args)));
             body->appendChild(this->finalize(nodeStart, new ExpressionStatementNode(expr.get())));
         }

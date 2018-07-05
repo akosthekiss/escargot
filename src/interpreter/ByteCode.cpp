@@ -88,6 +88,9 @@ ExtendedNodeLOC ByteCodeBlock::computeNodeLOCFromByteCode(Context* c, size_t cod
     fillLocDataIfNeeded(c);
 
     size_t index = 0;
+    if (!m_locData) {
+        return ExtendedNodeLOC(SIZE_MAX, SIZE_MAX, SIZE_MAX);
+    }
     for (size_t i = 0; i < m_locData->size(); i++) {
         if ((*m_locData)[i].first == codePosition) {
             index = (*m_locData)[i].second;

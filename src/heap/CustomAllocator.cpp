@@ -245,14 +245,4 @@ InterpretedCodeBlock* CustomAllocator<InterpretedCodeBlock>::allocate(size_type 
     return (InterpretedCodeBlock*)GC_GENERIC_MALLOC(sizeof(InterpretedCodeBlock), kind);
 }
 
-template <>
-DefaultConstructorCodeBlock* CustomAllocator<DefaultConstructorCodeBlock>::allocate(size_type GC_n, const void*)
-{
-    // Un-comment this to use default allocator
-    // return (DefaultConstructorCodeBlock*)GC_MALLOC((DefaultConstructorCodeBlock));
-    ASSERT(GC_n == 1);
-    int kind = s_gcKinds[HeapObjectKind::InterpretedCodeBlockKind];
-    return (DefaultConstructorCodeBlock*)GC_GENERIC_MALLOC(sizeof(DefaultConstructorCodeBlock), kind);
-}
-
 } // namespace Escargot

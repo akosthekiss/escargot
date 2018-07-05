@@ -32,6 +32,7 @@ public:
         : PropertyNode(key, value, kind, computed)
     {
         m_isStatic = isStatic;
+        m_name = nullptr;
     }
 
     virtual ~MethodDefinitionNode()
@@ -54,6 +55,10 @@ public:
             }
         }
         ASSERT(blk);
+
+        if (name()) {
+            blk->setFunctionName(name()->name());
+        }
         if (context->m_isWithScope && !context->m_isEvalCode)
             blk->setInWithScope();
         codeBlock->pushCode(CreateFunction(ByteCodeLOC(m_loc.index), dstRegister, blk), context, this);
@@ -65,8 +70,19 @@ public:
         return m_isStatic;
     }
 
+    void setName(IdentifierNode* name)
+    {
+        m_name = name;
+    }
+
+    IdentifierNode* name()
+    {
+        return m_name.get();
+    }
+
 protected:
     bool m_isStatic;
+    RefPtr<IdentifierNode> m_name;
 };
 }
 
