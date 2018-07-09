@@ -29,11 +29,12 @@ namespace Escargot {
 class CallExpressionNode : public ExpressionNode {
 public:
     friend class ScriptParser;
-    CallExpressionNode(Node* callee, ArgumentVector&& arguments)
+    CallExpressionNode(Node* callee, ArgumentVector&& arguments, bool useSuper = false)
         : ExpressionNode()
     {
         m_callee = callee;
         m_arguments = arguments;
+        m_useSuper = useSuper;
     }
 
     virtual ~CallExpressionNode()
@@ -198,7 +199,11 @@ public:
 
 
         if (isCalleeHasReceiver) {
-            receiverIndex = context->getLastRegisterIndex();
+            if (m_useSuper) {
+                receiverIndex = REGULAR_REGISTER_LIMIT;
+            } else {
+                receiverIndex = context->getLastRegisterIndex();
+            }
         }
 
         size_t argumentsStartIndex = generateArguments(codeBlock, context);
@@ -233,6 +238,7 @@ public:
 protected:
     RefPtr<Node> m_callee; // callee: Expression;
     ArgumentVector m_arguments; // arguments: [ Expression ];
+    bool m_useSuper;
 };
 }
 

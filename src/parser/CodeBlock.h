@@ -148,6 +148,11 @@ public:
         return m_hasSuperClass;
     }
 
+    bool inStatic()
+    {
+        return m_inStatic;
+    }
+
     bool inCatchWith()
     {
         return m_inCatch || m_inWith;
@@ -346,6 +351,7 @@ protected:
     bool m_needsVirtualIDOperation : 1;
     bool m_needToLoadThisValue : 1;
     bool m_isClass : 1;
+    bool m_inStatic : 1;
     bool m_isDefaultConstructor : 1;
     bool m_hasSuperClass : 1;
     uint16_t m_parameterCount;
@@ -598,9 +604,9 @@ public:
 
 protected:
     // init global codeBlock
-    InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags);
+    InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, bool inStatic, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags);
     // init function codeBlock
-    InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, AtomicString functionName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags);
+    InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool inStatic, AtomicString functionName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags);
     // default constructor
     InterpretedCodeBlock(Context* ctx, Script* script, Node* name, bool hasSuperClass, InterpretedCodeBlock* parentBlock, ExtendedNodeLOC sourceElementStart);
 

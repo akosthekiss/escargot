@@ -1,4 +1,5 @@
 /*
+n
  * Copyright (c) 2016-present Samsung Electronics Co., Ltd
  *
  *  This library is free software; you can redistribute it and/or
@@ -325,6 +326,7 @@ typedef TightVector<ASTScopeContextNameInfo, GCUtil::gc_malloc_atomic_ignore_off
 
 struct ASTScopeContext : public gc {
     bool m_isStrict : 1;
+    bool m_inStatic : 1;
     bool m_hasEval : 1;
     bool m_hasWith : 1;
     bool m_hasCatch : 1;
@@ -403,7 +405,7 @@ struct ASTScopeContext : public gc {
         }
     }
 
-    ASTScopeContext(bool isStrict = false)
+    ASTScopeContext(bool isStrict = false, bool inStatic = false)
         : m_locStart(SIZE_MAX, SIZE_MAX, SIZE_MAX)
 #ifndef NDEBUG
         , m_locEnd(SIZE_MAX, SIZE_MAX, SIZE_MAX)
@@ -412,6 +414,7 @@ struct ASTScopeContext : public gc {
 #endif
     {
         m_isStrict = isStrict;
+        m_inStatic = inStatic;
         m_hasEvaluateBindingId = m_hasYield = m_hasCatch = m_hasWith = m_hasEval = false;
         m_needsSpecialInitialize = m_hasManyNumeralLiteral = m_inCatch = m_inWith = false;
         m_isArrowFunctionExpression = false;

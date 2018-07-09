@@ -55,7 +55,6 @@ public:
             }
         }
         ASSERT(blk);
-
         if (name()) {
             blk->setFunctionName(name()->name());
         }

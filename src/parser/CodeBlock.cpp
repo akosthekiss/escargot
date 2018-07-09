@@ -96,6 +96,7 @@ CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
     m_isClass = false;
+    m_inStatic = false;
     m_hasSuperClass = false;
 
     m_parameterCount = info.m_argumentCount;
@@ -134,6 +135,7 @@ CodeBlock::CodeBlock(Context* ctx, AtomicString name, size_t argc, bool isStrict
     m_parameterCount = argc;
     m_nativeFunctionData = info;
     m_isClass = false;
+    m_inStatic = false;
     m_hasSuperClass = false;
 }
 
@@ -188,6 +190,7 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
     m_isClass = false;
+    m_inStatic = false;
     m_hasSuperClass = false;
 
     size_t targetFunctionLength = targetCodeBlock->parameterCount();
@@ -210,7 +213,7 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     }
 }
 
-InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags)
+InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, bool inStatic, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags)
     : m_sourceElementStart(sourceElementStart)
     , m_identifierOnStackCount(0)
     , m_identifierOnHeapCount(0)
@@ -281,6 +284,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
     m_isClass = false;
+    m_inStatic = inStatic;
     m_hasSuperClass = false;
 
     for (size_t i = 0; i < innerIdentifiers.size(); i++) {
@@ -296,7 +300,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = false;
 }
 
-InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, AtomicString functionName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers,
+InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool inStatic, AtomicString functionName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers,
                                            InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags)
     : m_sourceElementStart(sourceElementStart)
     , m_identifierOnStackCount(0)
@@ -416,6 +420,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
     m_isClass = false;
+    m_inStatic = inStatic;
     m_hasSuperClass = false;
 }
 
@@ -679,7 +684,7 @@ void InterpretedCodeBlock::computeVariables()
 }
 
 InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, Node* name, bool hasSuperClass, InterpretedCodeBlock* parentBlock, ExtendedNodeLOC sourceElementStart)
-    : InterpretedCodeBlock(ctx, script, StringView(), sourceElementStart, true, AtomicString(), AtomicStringTightVector(), ASTScopeContextNameInfoVector(), parentBlock, CodeBlockInitFlag::CodeBlockIsFunctionExpression)
+    : InterpretedCodeBlock(ctx, script, StringView(), sourceElementStart, true, false, AtomicString(), AtomicStringTightVector(), ASTScopeContextNameInfoVector(), parentBlock, CodeBlockInitFlag::CodeBlockIsFunctionExpression)
 {
     if (name && name->isIdentifier()) {
         m_functionName = name->asIdentifier()->name();

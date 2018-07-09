@@ -25,10 +25,18 @@ namespace Escargot {
 class SuperNode : public Node {
 public:
     friend class ScriptParser;
-    SuperNode(bool isCall = false)
+    enum Kind {
+        Undefined,
+        Access,
+        Assign,
+        Constructor
+    };
+
+    SuperNode(Kind kind = Undefined, bool inStatic = false)
         : Node()
     {
-        m_isCall = isCall;
+        m_kind = kind;
+        m_inStatic = inStatic;
     }
 
     virtual ASTNodeType type() { return ASTNodeType::Super; }
@@ -36,22 +44,60 @@ public:
     {
         Context *ctx = codeBlock->m_codeBlock->context();
 
+        ASSERT(kind() != Kind::Undefined);
 
-        if (m_isCall) {
+        if (kind() == Kind::Constructor) {
+            // super() this.__proto__.constructor.__proto__.call
+            ASSERT(!m_inStatic);
             size_t reg = context->getRegister();
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, reg, ctx->staticStrings().__proto__), context, this);
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, reg, ctx->staticStrings().constructor), context, this);
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, reg, ctx->staticStrings().__proto__), context, this);
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, dstRegister, ctx->staticStrings().call), context, this);
+        } else if (kind() == Kind::Access) {
+            //  ... = super.<property> or super.<function>()
+            if (m_inStatic) {
+                // super is this.__proto__
+                codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, dstRegister, ctx->staticStrings().__proto__), context, this);
+            } else {
+                // super is this.__proto__.constructor.__proto__.prototype
+                size_t reg = context->getRegister();
+                codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, reg, ctx->staticStrings().__proto__), context, this);
+                codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, reg, ctx->staticStrings().constructor), context, this);
+                codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, reg, ctx->staticStrings().__proto__), context, this);
+                codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, dstRegister, ctx->staticStrings().prototype), context, this);
+                context->giveUpRegister();
+            }
+        } else if (kind() == Kind::Assign) {
+            // super.<property> = ...
+            // super is this
+            if (dstRegister != REGULAR_REGISTER_LIMIT) {
+                codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, dstRegister), context, this);
+            }
         } else {
-            context->giveUpRegister();
-            // TODO Cannot identify super class name or current class name. Cannot retreive from this because it has differrent value in static method and proto method.
+            // Unknown kind
             RELEASE_ASSERT_NOT_REACHED();
         }
     }
 
+    void setKind(Kind kind)
+    {
+        m_kind = kind;
+    }
+
+    Kind kind()
+    {
+        return m_kind;
+    }
+
+    bool inStatic()
+    {
+        return m_inStatic;
+    }
+
 public:
-    bool m_isCall;
+    Kind m_kind;
+    bool m_inStatic;
 };
 }
 

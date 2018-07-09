@@ -77,7 +77,7 @@ public:
     }
 
 protected:
-    Kind m_kind; // kind: "init" | "get" | "set";
+    Kind m_kind; // kind: "none", "init" | "get" | "set" | "method" | "constructor";
     bool m_computed;
     RefPtr<Node> m_key; // key: Literal | Identifier;
     RefPtr<Node> m_value; // value: Expression;

@@ -2492,6 +2492,7 @@ struct Context : public gc {
     bool inWith : 1;
     bool inLoop : 1;
     bool strict : 1;
+    bool inStatic : 1;
     RefPtr<ScannerResult> firstCoverInitializedNameError;
     std::vector<std::pair<AtomicString, size_t>> labelSet; // <LabelString, with statement count>
     std::vector<FunctionDeclarationNode*> functionDeclarationsInDirectCatchScope;
@@ -2585,7 +2586,7 @@ public:
             return;
         }
         auto parentContext = scopeContexts.back();
-        scopeContexts.push_back(new ASTScopeContext(this->context->strict));
+        scopeContexts.push_back(new ASTScopeContext(this->context->strict, this->context->inStatic));
         scopeContexts.back()->m_functionName = functionName;
         scopeContexts.back()->m_inCatch = this->context->inCatch;
         scopeContexts.back()->m_inWith = this->context->inWith;
@@ -4191,10 +4192,12 @@ public:
         this->context->allowIn = true;
 
         RefPtr<Node> expr;
+        RefPtr<SuperNode> super;
         if (this->matchKeyword(Super) && this->context->inFunctionBody) {
             MetaNode node = this->createNode();
             this->nextToken();
-            expr = this->finalize(node, new SuperNode(this->match(LeftParenthesis)));
+            expr = this->finalize(node, new SuperNode(this->match(LeftParenthesis) ? SuperNode::Kind::Constructor : SuperNode::Kind::Undefined, this->context->inStatic));
+            super = static_cast<SuperNode*>(expr.get());
             if (!this->match(LeftParenthesis) && !this->match(Period) && !this->match(LeftSquareBracket)) {
                 this->throwUnexpectedToken(this->lookahead);
             }
@@ -4202,6 +4205,7 @@ public:
             expr = this->inheritCoverGrammar(this->matchKeyword(New) ? &Parser::parseNewExpression : &Parser::parsePrimaryExpression);
         }
 
+        bool isFirst = true;
         while (true) {
             if (this->match(Period)) {
                 this->context->isBindingElement = false;
@@ -4217,10 +4221,18 @@ public:
                 this->context->isBindingElement = false;
                 this->context->isAssignmentTarget = false;
                 ArgumentVector args = this->parseArguments();
+
+                bool useSuper = false;
+                if (!isFirst && super) {
+                    super->setKind(SuperNode::Kind::Access);
+                    useSuper = true;
+                }
+                super = nullptr;
+
                 if (args.size() > 65535) {
                     this->throwError("too many arguments in call");
                 }
-                expr = this->finalize(this->startNode(startToken), new CallExpressionNode(expr.get(), std::move(args)));
+                expr = this->finalize(this->startNode(startToken), new CallExpressionNode(expr.get(), std::move(args), useSuper));
 
             } else if (this->match(LeftSquareBracket)) {
                 this->context->isBindingElement = false;
@@ -4236,6 +4248,14 @@ public:
             } else {
                 break;
             }
+
+            if (isFirst && super) {
+                super->setKind(matchAssign() ? SuperNode::Kind::Assign : SuperNode::Kind::Access);
+            } else {
+                super = nullptr;
+            }
+
+            isFirst = false;
         }
         this->context->allowIn = previousAllowIn;
 
@@ -4251,7 +4271,7 @@ public:
             this->throwUnexpectedToken(this->lookahead);
         }
 
-        return this->finalize(node, new SuperNode());
+        return this->finalize(node, new SuperNode(this->match(LeftSquareBracket) ? SuperNode::Kind::Constructor : SuperNode::Kind::Undefined, this->context->inStatic));
     }
 
     RefPtr<Node> parseLeftHandSideExpression()
@@ -4260,7 +4280,15 @@ public:
         ASSERT(this->context->allowIn);
 
         MetaNode node = this->startNode(this->lookahead);
-        RefPtr<Node> expr = (this->matchKeyword(Super) && this->context->inFunctionBody) ? this->parseSuper() : this->inheritCoverGrammar(this->matchKeyword(New) ? &Parser::parseNewExpression : &Parser::parsePrimaryExpression);
+
+        RefPtr<Node> expr;
+        RefPtr<SuperNode> super;
+        if (this->matchKeyword(Super) && this->context->inFunctionBody) {
+            expr = parseSuper();
+            super = static_cast<SuperNode*>(expr.get());
+        } else {
+            expr = this->inheritCoverGrammar(this->matchKeyword(New) ? &Parser::parseNewExpression : &Parser::parsePrimaryExpression);
+        }
 
         while (true) {
             if (this->match(LeftSquareBracket)) {
@@ -4286,6 +4314,11 @@ public:
                 expr = this->convertTaggedTempleateExpressionToCallExpression(node, this->finalize(node, new TaggedTemplateExpressionNode(expr.get(), quasi.get())).get());
             } else {
                 break;
+            }
+
+            if (super) {
+                super->setKind(matchAssign() ? SuperNode::Kind::Assign : SuperNode::Kind::Access);
+                super = nullptr;
             }
         }
 
@@ -6212,11 +6245,13 @@ public:
         bool previousInIteration = this->context->inIteration;
         bool previousInSwitch = this->context->inSwitch;
         bool previousInFunctionBody = this->context->inFunctionBody;
+        bool previousInStatic = this->context->inStatic;
 
         this->context->labelSet.clear();
         this->context->inIteration = false;
         this->context->inSwitch = false;
         this->context->inFunctionBody = true;
+        this->context->inStatic = this->scopeContexts.back()->m_inStatic;
 
         StatementNode* referNode = nullptr;
         while (this->startMarker.index < this->scanner->length) {
@@ -6232,6 +6267,7 @@ public:
         this->context->inIteration = previousInIteration;
         this->context->inSwitch = previousInSwitch;
         this->context->inFunctionBody = previousInFunctionBody;
+        this->context->inStatic = previousInStatic;
 
         scopeContexts.back()->m_locStart.line = nodeStart.line;
         scopeContexts.back()->m_locStart.column = nodeStart.column;
@@ -6561,6 +6597,8 @@ public:
         RefPtr<ScannerResult> token = this->lookahead;
         MetaNode node = this->createNode();
 
+        const bool previousInStatic = this->context->inStatic;
+
         PropertyNode::Kind kind = PropertyNode::Kind::None;
         RefPtr<Node> key; //'': Node.PropertyKey;
         RefPtr<FunctionExpressionNode> value; //: Node.FunctionExpression;
@@ -6577,7 +6615,7 @@ public:
             IdentifierNode* id = key->isIdentifier() ? key->asIdentifier() : nullptr;
             if (id && id->name() == "static" && (this->qualifiedPropertyName(this->lookahead) || this->match(Multiply))) {
                 token = this->lookahead;
-                isStatic = true;
+                this->context->inStatic = isStatic = true;
                 computed = this->match(LeftSquareBracket);
                 if (this->match(Multiply)) {
                     this->nextToken();
@@ -6637,6 +6675,7 @@ public:
                 kind = PropertyNode::Kind::Constructor;
             }
         }
+        this->context->inStatic = previousInStatic;
         return this->finalize(node, new MethodDefinitionNode(key.get(), computed, value.get(), kind, isStatic));
     }
 
@@ -6723,7 +6762,7 @@ public:
     RefPtr<ProgramNode> parseProgram()
     {
         MetaNode node = this->createNode();
-        scopeContexts.push_back(new ASTScopeContext(this->context->strict));
+        scopeContexts.push_back(new ASTScopeContext(this->context->strict, this->context->inStatic));
         RefPtr<StatementContainer> body = this->parseDirectivePrologues();
         StatementNode* referNode = nullptr;
         while (this->startMarker.index < this->scanner->length) {
@@ -6989,7 +7028,7 @@ std::tuple<RefPtr<Node>, ASTScopeContext*> parseSingleFunction(::Escargot::Conte
     parser.trackUsingNames = false;
     parser.config.parseSingleFunction = true;
     parser.config.parseSingleFunctionTarget = codeBlock;
-    auto scopeCtx = new ASTScopeContext(codeBlock->isStrict());
+    auto scopeCtx = new ASTScopeContext(codeBlock->isStrict(), codeBlock->inStatic());
     parser.scopeContexts.pushBack(scopeCtx);
     RefPtr<Node> nd;
     if (codeBlock->isArrowFunctionExpression()) {
