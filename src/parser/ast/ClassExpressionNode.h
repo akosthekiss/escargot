@@ -75,6 +75,7 @@ public:
             size_t descriptReigster = context->getRegister();
             size_t funcRegister = context->getRegister();
             size_t objectRegister = context->getRegister();
+            size_t boolRegister = context->getRegister();
 
             codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), targetRegister, defineRegister), context, this);
             codeBlock->pushCode(GetGlobalObject(ByteCodeLOC(m_loc.index), objectRegister, ctx->staticStrings().Object), context, this);
@@ -83,8 +84,15 @@ public:
             codeBlock->pushCode(CreateObject(ByteCodeLOC(m_loc.index), descriptReigster), context, this);
             codeBlock->pushCode(ObjectDefineOwnPropertyWithNameOperation(ByteCodeLOC(m_loc.index), descriptReigster, ctx->staticStrings().key, keyRegister), context, this);
             codeBlock->pushCode(ObjectDefineOwnPropertyWithNameOperation(ByteCodeLOC(m_loc.index), descriptReigster, ctx->staticStrings().value, valueRegister), context, this);
+
+            codeBlock->pushCode(LoadLiteral(ByteCodeLOC(m_loc.index), boolRegister, Value(false)), context, this);
+            codeBlock->pushCode(ObjectDefineOwnPropertyWithNameOperation(ByteCodeLOC(m_loc.index), descriptReigster, ctx->staticStrings().enumerable, boolRegister), context, this);
+            codeBlock->pushCode(LoadLiteral(ByteCodeLOC(m_loc.index), boolRegister, Value(true)), context, this);
+            codeBlock->pushCode(ObjectDefineOwnPropertyWithNameOperation(ByteCodeLOC(m_loc.index), descriptReigster, ctx->staticStrings().writable, boolRegister), context, this);
+            codeBlock->pushCode(ObjectDefineOwnPropertyWithNameOperation(ByteCodeLOC(m_loc.index), descriptReigster, ctx->staticStrings().configurable, boolRegister), context, this);
             codeBlock->pushCode(CallFunctionWithReceiver(ByteCodeLOC(m_loc.index), objectRegister, funcRegister, defineRegister, 3, descriptReigster), context, this);
 
+            context->giveUpRegister();
             context->giveUpRegister();
             context->giveUpRegister();
             context->giveUpRegister();

@@ -188,7 +188,7 @@ ScriptParser::ScriptParserResult ScriptParser::parse(StringView scriptSource, St
 
     try {
         m_context->vmInstance()->m_parsedSourceCodes.push_back(scriptSource.string());
-        RefPtr<ProgramNode> program = esprima::parseProgram(m_context, scriptSource, nullptr, strictFromOutside, stackSizeRemain);
+        RefPtr<ProgramNode> program = esprima::parseProgram(m_context, scriptSource, nullptr, strictFromOutside, parentCodeBlock ? parentCodeBlock->inStatic() : false, parentCodeBlock ? parentCodeBlock->isClassConstructorCodeBlock() : false, stackSizeRemain);
 
         script = new Script(fileName, new StringView(scriptSource));
         InterpretedCodeBlock* topCodeBlock;

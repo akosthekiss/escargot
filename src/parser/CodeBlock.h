@@ -138,17 +138,22 @@ public:
         return m_isConstructor;
     }
 
-    bool isClass()
+    bool isClass() const
     {
         return m_isClass;
     }
 
-    bool hasSuperClass()
+    void setClass()
+    {
+        m_isClass = true;
+    }
+
+    bool hasSuperClass() const
     {
         return m_hasSuperClass;
     }
 
-    bool inStatic()
+    bool inStatic() const
     {
         return m_inStatic;
     }
@@ -308,7 +313,12 @@ public:
 
     bool isDefaultConstructorCodeBlock() const
     {
-        return m_isConstructor && m_isClass;
+        return m_isDefaultConstructor;
+    }
+
+    bool isClassConstructorCodeBlock() const
+    {
+        return isClass() && isConstructor();
     }
 
     CallNativeFunctionData* nativeFunctionData()

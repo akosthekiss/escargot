@@ -96,6 +96,7 @@ CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
     m_isClass = false;
+    m_isDefaultConstructor = false;
     m_inStatic = false;
     m_hasSuperClass = false;
 
@@ -135,6 +136,7 @@ CodeBlock::CodeBlock(Context* ctx, AtomicString name, size_t argc, bool isStrict
     m_parameterCount = argc;
     m_nativeFunctionData = info;
     m_isClass = false;
+    m_isDefaultConstructor = false;
     m_inStatic = false;
     m_hasSuperClass = false;
 }
@@ -190,6 +192,7 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
     m_isClass = false;
+    m_isDefaultConstructor = false;
     m_inStatic = false;
     m_hasSuperClass = false;
 
@@ -284,6 +287,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
     m_isClass = false;
+    m_isDefaultConstructor = false;
     m_inStatic = inStatic;
     m_hasSuperClass = false;
 
@@ -420,6 +424,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
     m_isClass = false;
+    m_isDefaultConstructor = false;
     m_inStatic = inStatic;
     m_hasSuperClass = false;
 }
@@ -692,6 +697,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, Node* n
     m_isConstructor = true;
     m_isClass = true;
     m_hasSuperClass = hasSuperClass;
+    m_isDefaultConstructor = true;
     captureArguments();
     computeVariables();
 }

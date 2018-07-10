@@ -48,7 +48,6 @@ public:
 
         if (kind() == Kind::Constructor) {
             // super() this.__proto__.constructor.__proto__.call
-            ASSERT(!m_inStatic);
             size_t reg = context->getRegister();
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, reg, ctx->staticStrings().__proto__), context, this);
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, reg, ctx->staticStrings().constructor), context, this);

@@ -2493,6 +2493,7 @@ struct Context : public gc {
     bool inLoop : 1;
     bool strict : 1;
     bool inStatic : 1;
+    bool inClassConstructor : 1;
     RefPtr<ScannerResult> firstCoverInitializedNameError;
     std::vector<std::pair<AtomicString, size_t>> labelSet; // <LabelString, with statement count>
     std::vector<FunctionDeclarationNode*> functionDeclarationsInDirectCatchScope;
@@ -2666,6 +2667,8 @@ public:
         this->context->inWith = false;
         this->context->inLoop = false;
         this->context->strict = this->sourceType == Module;
+        this->context->inStatic = false;
+        this->context->inClassConstructor = false;
 
         this->baseMarker.index = startIndex;
         this->baseMarker.lineNumber = this->scanner->lineNumber;
@@ -4221,7 +4224,9 @@ public:
                 this->context->isBindingElement = false;
                 this->context->isAssignmentTarget = false;
                 ArgumentVector args = this->parseArguments();
-
+                if (isFirst && super && !this->context->inClassConstructor) {
+                    this->throwUnexpectedToken(this->lookahead);
+                }
                 bool useSuper = false;
                 if (!isFirst && super) {
                     super->setKind(SuperNode::Kind::Access);
@@ -5775,6 +5780,8 @@ public:
         RefPtr<Node> argument = nullptr;
         if (hasArgument) {
             argument = this->parseExpression();
+        } else if (this->context->inClassConstructor) {
+            argument = this->finalize(node, new ThisExpressionNode());
         }
         this->consumeSemicolon();
 
@@ -6183,9 +6190,9 @@ public:
         InterpretedCodeBlock* currentTarget = config.parseSingleFunctionTarget->asInterpretedCodeBlock();
         MetaNode nodeStart = this->createNode();
         RefPtr<StatementContainer> body = StatementContainer::create();
+        RefPtr<Node> thisNode = this->finalize(nodeStart, new ThisExpressionNode());
         if (currentTarget->hasSuperClass()) {
             RefPtr<Node> expr;
-            RefPtr<Node> thisNode = this->finalize(nodeStart, new ThisExpressionNode());
             RefPtr<Node> __proto__ = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().__proto__));
             RefPtr<Node> constructor = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().constructor));
             RefPtr<Node> apply = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().apply));
@@ -6200,10 +6207,10 @@ public:
             args.push_back(thisNode);
             args.push_back(arguments);
             expr = this->finalize(nodeStart, new CallExpressionNode(expr.get(), std::move(args)));
-            body->appendChild(this->finalize(nodeStart, new ExpressionStatementNode(expr.get())));
+            body->appendChild(this->finalize(nodeStart, new ReturnStatmentNode(expr.get())));
+        } else {
+            body->appendChild(this->finalize(nodeStart, new ReturnStatmentNode(thisNode.get())));
         }
-
-        body->appendChild(this->finalize(nodeStart, new ReturnStatmentNode(nullptr)));
         return this->finalize(nodeStart, new BlockStatementNode(body.get()));
     }
 
@@ -6246,6 +6253,7 @@ public:
         bool previousInSwitch = this->context->inSwitch;
         bool previousInFunctionBody = this->context->inFunctionBody;
         bool previousInStatic = this->context->inStatic;
+        bool previousInClassConstructor = this->context->inClassConstructor;
 
         this->context->labelSet.clear();
         this->context->inIteration = false;
@@ -6268,6 +6276,7 @@ public:
         this->context->inSwitch = previousInSwitch;
         this->context->inFunctionBody = previousInFunctionBody;
         this->context->inStatic = previousInStatic;
+        this->context->inClassConstructor = previousInClassConstructor;
 
         scopeContexts.back()->m_locStart.line = nodeStart.line;
         scopeContexts.back()->m_locStart.column = nodeStart.column;
@@ -6646,9 +6655,12 @@ public:
             method = true;
         }
         if (kind == PropertyNode::Kind::None && key && this->match(LeftParenthesis)) {
+            bool previousInClassConstructor = this->context->inClassConstructor;
+            this->context->inClassConstructor = !isStatic && this->isPropertyKey(key.get(), "constructor");
             kind = PropertyNode::Kind::Init;
             value = this->parsePropertyMethodFunction();
             method = true;
+            this->context->inClassConstructor = previousInClassConstructor;
         }
 
         if (kind == PropertyNode::Kind::None) {
@@ -7014,10 +7026,15 @@ public:
     */
 };
 
-RefPtr<ProgramNode> parseProgram(::Escargot::Context* ctx, StringView source, ParserASTNodeHandler handler, bool strictFromOutside, size_t stackRemain)
+RefPtr<ProgramNode> parseProgram(::Escargot::Context* ctx, StringView source, ParserASTNodeHandler handler, bool strictFromOutside, bool inStaticFromOutsize, bool inClassConstructor, size_t stackRemain)
 {
     Parser parser(ctx, source, handler, stackRemain);
     parser.context->strict = strictFromOutside;
+    parser.context->inStatic = inStaticFromOutsize;
+    parser.context->inClassConstructor = inClassConstructor;
+    if (parser.context->inClassConstructor) {
+        parser.context->inFunctionBody = true;
+    }
     RefPtr<ProgramNode> nd = parser.parseProgram();
     return nd;
 }
@@ -7028,6 +7045,7 @@ std::tuple<RefPtr<Node>, ASTScopeContext*> parseSingleFunction(::Escargot::Conte
     parser.trackUsingNames = false;
     parser.config.parseSingleFunction = true;
     parser.config.parseSingleFunctionTarget = codeBlock;
+    parser.context->inClassConstructor = codeBlock->isClassConstructorCodeBlock();
     auto scopeCtx = new ASTScopeContext(codeBlock->isStrict(), codeBlock->inStatic());
     parser.scopeContexts.pushBack(scopeCtx);
     RefPtr<Node> nd;

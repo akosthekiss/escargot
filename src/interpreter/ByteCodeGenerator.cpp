@@ -196,6 +196,8 @@ ByteCodeBlock* ByteCodeGenerator::generateByteCode(Context* c, InterpretedCodeBl
                 nd = nd->nextSilbing();
             }
             if (last && last->type() == ASTNodeType::ReturnStatement) {
+            } else if (codeBlock->isClassConstructorCodeBlock()) {
+                block->pushCode(ReturnFunctionWithValue(ByteCodeLOC(SIZE_MAX), REGULAR_REGISTER_LIMIT), &ctx, nullptr);
             } else {
                 block->pushCode(ReturnFunction(ByteCodeLOC(SIZE_MAX)), &ctx, nullptr);
             }
