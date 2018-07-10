@@ -1048,9 +1048,9 @@ Value ByteCodeInterpreter::interpret(ExecutionState& state, ByteCodeBlock* byteC
                 :
             {
                 BinaryInOperation* code = (BinaryInOperation*)programCounter;
-                if (!registerFile[code->m_srcIndex1].isObject())
-                    ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "type of rvalue is not Object");
-                auto result = registerFile[code->m_srcIndex1].toObject(state)->get(state, ObjectPropertyName(state, registerFile[code->m_srcIndex0]));
+                const Value& left = registerFile[code->m_srcIndex0];
+                const Value& right = registerFile[code->m_srcIndex1];
+                auto result = binaryInOperation(state, left, right);
                 registerFile[code->m_dstIndex] = Value(result.hasValue());
                 ADD_PROGRAM_COUNTER(BinaryInOperation);
                 NEXT_INSTRUCTION();
@@ -2001,6 +2001,19 @@ NEVER_INLINE Value ByteCodeInterpreter::withOperation(ExecutionState& state, Wit
         programCounter = jumpTo(codeBuffer, code->m_withEndPostion);
     }
     return Value(Value::EmptyValue);
+}
+
+NEVER_INLINE ObjectGetResult ByteCodeInterpreter::binaryInOperation(ExecutionState& state, const Value& left, const Value& right)
+{
+    auto result = ObjectGetResult();
+    if (!right.isObject()) {
+        ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "type of rvalue is not Object");
+        return result;
+    }
+
+    result = right.toObject(state)->get(state, ObjectPropertyName(state, left));
+
+    return result;
 }
 
 NEVER_INLINE Value ByteCodeInterpreter::callFunctionInWithScope(ExecutionState& state, CallFunctionInWithScope* code, ExecutionContext* ec, LexicalEnvironment* env, Value* argv)
