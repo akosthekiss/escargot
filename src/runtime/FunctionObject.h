@@ -77,9 +77,9 @@ public:
         return m_codeBlock->isArrowFunctionExpression();
     }
 
-    bool isClass()
+    bool isMethodProperty()
     {
-        return m_codeBlock->isClass();
+        return m_codeBlock->isMethodProperty();
     }
 
     virtual bool isFunctionObject() const
@@ -101,6 +101,9 @@ public:
 
     ALWAYS_INLINE static Value call(ExecutionState& state, const Value& callee, const Value& receiver, const size_t& argc, Value* argv)
     {
+        if (UNLIKELY(callee.isFunction() && callee.asFunction()->isMethodProperty() && callee.asFunction()->isConstructor())) {
+            ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, errorMessage_Class_NotCallable);
+        }
         if (LIKELY(callee.isObject() && callee.asPointerValue()->hasTag(g_functionObjectTag))) {
             return callee.asFunction()->processCall(state, receiver, argc, argv, false);
         } else {

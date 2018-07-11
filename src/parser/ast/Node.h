@@ -326,7 +326,7 @@ typedef TightVector<ASTScopeContextNameInfo, GCUtil::gc_malloc_atomic_ignore_off
 
 struct ASTScopeContext : public gc {
     bool m_isStrict : 1;
-    bool m_inStatic : 1;
+    bool m_isStatic : 1;
     bool m_hasEval : 1;
     bool m_hasWith : 1;
     bool m_hasCatch : 1;
@@ -335,6 +335,8 @@ struct ASTScopeContext : public gc {
     bool m_inCatch : 1;
     bool m_inWith : 1;
     bool m_isArrowFunctionExpression : 1;
+    bool m_isConstructor : 1;
+    bool m_isMethodProperty : 1;
     bool m_hasManyNumeralLiteral : 1;
     bool m_needsSpecialInitialize : 1; // flag for fd in catch
     ASTNodeType m_nodeType : 12;
@@ -406,7 +408,7 @@ struct ASTScopeContext : public gc {
         }
     }
 
-    ASTScopeContext(bool isStrict = false, bool inStatic = false)
+    ASTScopeContext(bool isStrict = false, bool isStatic = false)
         : m_locStart(SIZE_MAX, SIZE_MAX, SIZE_MAX)
 #ifndef NDEBUG
         , m_locEnd(SIZE_MAX, SIZE_MAX, SIZE_MAX)
@@ -415,7 +417,7 @@ struct ASTScopeContext : public gc {
 #endif
     {
         m_isStrict = isStrict;
-        m_inStatic = inStatic;
+        m_isStatic = isStatic;
         m_hasEvaluateBindingId = m_hasYield = m_hasCatch = m_hasWith = m_hasEval = false;
         m_needsSpecialInitialize = m_hasManyNumeralLiteral = m_inCatch = m_inWith = false;
         m_isArrowFunctionExpression = false;

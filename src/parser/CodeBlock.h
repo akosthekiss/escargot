@@ -138,14 +138,9 @@ public:
         return m_isConstructor;
     }
 
-    bool isClass() const
+    bool isMethodProperty() const
     {
-        return m_isClass;
-    }
-
-    void setClass()
-    {
-        m_isClass = true;
+        return m_isMethodProperty;
     }
 
     bool hasSuperClass() const
@@ -153,9 +148,9 @@ public:
         return m_hasSuperClass;
     }
 
-    bool inStatic() const
+    bool isStatic() const
     {
-        return m_inStatic;
+        return m_isStatic;
     }
 
     bool inCatchWith()
@@ -328,7 +323,7 @@ public:
 
     bool isClassConstructorCodeBlock() const
     {
-        return isClass() && isConstructor();
+        return isMethodProperty() && isConstructor();
     }
 
     CallNativeFunctionData* nativeFunctionData()
@@ -370,8 +365,8 @@ protected:
     bool m_isBindedFunction : 1;
     bool m_needsVirtualIDOperation : 1;
     bool m_needToLoadThisValue : 1;
-    bool m_isClass : 1;
-    bool m_inStatic : 1;
+    bool m_isMethodProperty : 1;
+    bool m_isStatic : 1;
     bool m_isDefaultConstructor : 1;
     bool m_hasSuperClass : 1;
     uint16_t m_parameterCount;
@@ -625,9 +620,9 @@ public:
 
 protected:
     // init global codeBlock
-    InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, bool inStatic, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags);
+    InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, bool isStatic, bool isMethodProperty, bool isConstructor, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags);
     // init function codeBlock
-    InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool inStatic, AtomicString functionName, AtomicString restName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags);
+    InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool isStatic, bool isMethodProperty, bool isConstructor, AtomicString functionName, AtomicString restName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags);
     // default constructor
     InterpretedCodeBlock(Context* ctx, Script* script, Node* name, bool hasSuperClass, InterpretedCodeBlock* parentBlock, ExtendedNodeLOC sourceElementStart);
 

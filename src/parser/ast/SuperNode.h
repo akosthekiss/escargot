@@ -32,11 +32,11 @@ public:
         Constructor
     };
 
-    SuperNode(Kind kind = Undefined, bool inStatic = false)
+    SuperNode(Kind kind = Undefined, bool isStatic = false)
         : Node()
     {
         m_kind = kind;
-        m_inStatic = inStatic;
+        m_isStatic = isStatic;
     }
 
     virtual ASTNodeType type() { return ASTNodeType::Super; }
@@ -55,7 +55,7 @@ public:
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, dstRegister, ctx->staticStrings().call), context, this);
         } else if (kind() == Kind::Access) {
             //  ... = super.<property> or super.<function>()
-            if (m_inStatic) {
+            if (m_isStatic) {
                 // super is this.__proto__
                 codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, dstRegister, ctx->staticStrings().__proto__), context, this);
             } else {
@@ -89,14 +89,14 @@ public:
         return m_kind;
     }
 
-    bool inStatic()
+    bool isStatic()
     {
-        return m_inStatic;
+        return m_isStatic;
     }
 
 public:
     Kind m_kind;
-    bool m_inStatic;
+    bool m_isStatic;
 };
 }
 

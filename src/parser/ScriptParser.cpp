@@ -39,7 +39,7 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
     InterpretedCodeBlock* codeBlock;
     if (parentCodeBlock == nullptr) {
         // globalBlock
-        codeBlock = new InterpretedCodeBlock(ctx, script, source, scopeCtx->m_isStrict, scopeCtx->m_inStatic, ExtendedNodeLOC(1, 1, 0), scopeCtx->m_names,
+        codeBlock = new InterpretedCodeBlock(ctx, script, source, scopeCtx->m_isStrict, scopeCtx->m_isStatic, scopeCtx->m_isMethodProperty, scopeCtx->m_isConstructor, ExtendedNodeLOC(1, 1, 0), scopeCtx->m_names,
                                              (CodeBlock::CodeBlockInitFlag)((scopeCtx->m_hasEval ? CodeBlock::CodeBlockHasEval : 0)
                                                                             | (scopeCtx->m_hasWith ? CodeBlock::CodeBlockHasWith : 0)
                                                                             | (scopeCtx->m_hasCatch ? CodeBlock::CodeBlockHasCatch : 0)
@@ -54,7 +54,9 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
         codeBlock = new InterpretedCodeBlock(ctx, script, StringView(source, scopeCtx->m_locStart.index, scopeCtx->m_locEnd.index),
                                              scopeCtx->m_locStart,
                                              scopeCtx->m_isStrict,
-                                             scopeCtx->m_inStatic,
+                                             scopeCtx->m_isStatic,
+                                             scopeCtx->m_isMethodProperty,
+                                             scopeCtx->m_isConstructor,
                                              scopeCtx->m_functionName,
                                              scopeCtx->m_restName,
                                              scopeCtx->m_parameters, scopeCtx->m_names, parentCodeBlock,
@@ -204,7 +206,7 @@ ScriptParser::ScriptParserResult ScriptParser::parse(StringView scriptSource, St
 
     try {
         m_context->vmInstance()->m_parsedSourceCodes.push_back(scriptSource.string());
-        RefPtr<ProgramNode> program = esprima::parseProgram(m_context, scriptSource, nullptr, strictFromOutside, parentCodeBlock ? parentCodeBlock->inStatic() : false, parentCodeBlock ? parentCodeBlock->isClassConstructorCodeBlock() : false, stackSizeRemain);
+        RefPtr<ProgramNode> program = esprima::parseProgram(m_context, scriptSource, nullptr, strictFromOutside, parentCodeBlock, stackSizeRemain);
 
         script = new Script(fileName, new StringView(scriptSource));
         InterpretedCodeBlock* topCodeBlock;

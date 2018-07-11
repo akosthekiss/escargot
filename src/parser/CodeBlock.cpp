@@ -95,9 +95,9 @@ CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     m_isBindedFunction = false;
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
-    m_isClass = false;
+    m_isMethodProperty = false;
     m_isDefaultConstructor = false;
-    m_inStatic = false;
+    m_isStatic = false;
     m_hasSuperClass = false;
 
     m_parameterCount = info.m_argumentCount;
@@ -135,9 +135,9 @@ CodeBlock::CodeBlock(Context* ctx, AtomicString name, size_t argc, bool isStrict
     m_needToLoadThisValue = false;
     m_parameterCount = argc;
     m_nativeFunctionData = info;
-    m_isClass = false;
+    m_isMethodProperty = false;
     m_isDefaultConstructor = false;
-    m_inStatic = false;
+    m_isStatic = false;
     m_hasSuperClass = false;
 }
 
@@ -191,9 +191,9 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     m_isBindedFunction = true;
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
-    m_isClass = false;
+    m_isMethodProperty = false;
     m_isDefaultConstructor = false;
-    m_inStatic = false;
+    m_isStatic = false;
     m_hasSuperClass = false;
 
     size_t targetFunctionLength = targetCodeBlock->parameterCount();
@@ -216,7 +216,7 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     }
 }
 
-InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, bool inStatic, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags)
+InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, bool isStatic, bool isMethodProperty, bool isConstructor, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags)
     : m_sourceElementStart(sourceElementStart)
     , m_identifierOnStackCount(0)
     , m_identifierOnHeapCount(0)
@@ -233,7 +233,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_byteCodeBlock = nullptr;
 
     m_parameterCount = 0;
-    m_isConstructor = false;
+    m_isConstructor = isConstructor;
     m_hasCallNativeFunctionCode = false;
     m_isFunctionDeclaration = false;
     m_isFunctionDeclarationWithSpecialBinding = false;
@@ -286,9 +286,9 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isBindedFunction = false;
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
-    m_isClass = false;
+    m_isMethodProperty = isMethodProperty;
     m_isDefaultConstructor = false;
-    m_inStatic = inStatic;
+    m_isStatic = isStatic;
     m_hasSuperClass = false;
 
     for (size_t i = 0; i < innerIdentifiers.size(); i++) {
@@ -304,7 +304,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = false;
 }
 
-InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool inStatic, AtomicString functionName, AtomicString restName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags)
+InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool isStatic, bool isMethodProperty, bool isConstructor, AtomicString functionName, AtomicString restName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags)
     : m_sourceElementStart(sourceElementStart)
     , m_identifierOnStackCount(0)
     , m_identifierOnHeapCount(0)
@@ -328,7 +328,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
         m_parametersInfomation[i].m_isDuplicated = false;
     }
     m_parameterCount = parameterNames.size();
-    m_isConstructor = true;
+    m_isConstructor = isConstructor;
     m_hasCallNativeFunctionCode = false;
     m_isStrict = isStrict;
     if (initFlags & CodeBlockInitFlag::CodeBlockHasEval) {
@@ -423,9 +423,9 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isBindedFunction = false;
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
-    m_isClass = false;
+    m_isMethodProperty = isMethodProperty;
     m_isDefaultConstructor = false;
-    m_inStatic = inStatic;
+    m_isStatic = isStatic;
     m_hasSuperClass = false;
 }
 
@@ -689,13 +689,11 @@ void InterpretedCodeBlock::computeVariables()
 }
 
 InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, Node* name, bool hasSuperClass, InterpretedCodeBlock* parentBlock, ExtendedNodeLOC sourceElementStart)
-    : InterpretedCodeBlock(ctx, script, StringView(), sourceElementStart, true, false, AtomicString(), AtomicString(), AtomicStringTightVector(), ASTScopeContextNameInfoVector(), parentBlock, CodeBlockInitFlag::CodeBlockIsFunctionExpression)
+    : InterpretedCodeBlock(ctx, script, StringView(), sourceElementStart, true, false, true, true, AtomicString(), AtomicString(), AtomicStringTightVector(), ASTScopeContextNameInfoVector(), parentBlock, CodeBlockInitFlag::CodeBlockIsFunctionExpression)
 {
     if (name && name->isIdentifier()) {
         m_functionName = name->asIdentifier()->name();
     }
-    m_isConstructor = true;
-    m_isClass = true;
     m_hasSuperClass = hasSuperClass;
     m_isDefaultConstructor = true;
     captureArguments();

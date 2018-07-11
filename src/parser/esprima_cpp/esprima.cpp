@@ -2492,8 +2492,9 @@ struct Context : public gc {
     bool inWith : 1;
     bool inLoop : 1;
     bool strict : 1;
-    bool inStatic : 1;
-    bool inClassConstructor : 1;
+    bool isStatic : 1;
+    bool isConstructor : 1;
+    bool isMethodProperty : 1;
     RefPtr<ScannerResult> firstCoverInitializedNameError;
     std::vector<std::pair<AtomicString, size_t>> labelSet; // <LabelString, with statement count>
     std::vector<FunctionDeclarationNode*> functionDeclarationsInDirectCatchScope;
@@ -2593,10 +2594,12 @@ public:
             return;
         }
         auto parentContext = scopeContexts.back();
-        scopeContexts.push_back(new ASTScopeContext(this->context->strict, this->context->inStatic));
+        scopeContexts.push_back(new ASTScopeContext(this->context->strict, this->context->isStatic));
         scopeContexts.back()->m_functionName = functionName;
         scopeContexts.back()->m_inCatch = this->context->inCatch;
         scopeContexts.back()->m_inWith = this->context->inWith;
+        scopeContexts.back()->m_isMethodProperty = this->context->isMethodProperty;
+        scopeContexts.back()->m_isConstructor = this->context->isConstructor;
 
         bool hasRest = false;
         if (params.size() > 0 && params[params.size() - 1]->type() == RestElement) {
@@ -2687,8 +2690,9 @@ public:
         this->context->inWith = false;
         this->context->inLoop = false;
         this->context->strict = this->sourceType == Module;
-        this->context->inStatic = false;
-        this->context->inClassConstructor = false;
+        this->context->isStatic = false;
+        this->context->isConstructor = true;
+        this->context->isMethodProperty = false;
 
         this->baseMarker.index = startIndex;
         this->baseMarker.lineNumber = this->scanner->lineNumber;
@@ -4275,12 +4279,12 @@ public:
 
         RefPtr<Node> expr;
         RefPtr<SuperNode> super;
-        if (this->matchKeyword(Super) && this->context->inFunctionBody) {
+        if (this->matchKeyword(Super) && this->context->isMethodProperty) {
             MetaNode node = this->createNode();
             this->nextToken();
-            expr = this->finalize(node, new SuperNode(this->match(LeftParenthesis) ? SuperNode::Kind::Constructor : SuperNode::Kind::Undefined, this->context->inStatic));
+            expr = this->finalize(node, new SuperNode(this->match(LeftParenthesis) ? SuperNode::Kind::Constructor : SuperNode::Kind::Undefined, this->context->isStatic));
             super = static_cast<SuperNode*>(expr.get());
-            if (!this->match(LeftParenthesis) && !this->match(Period) && !this->match(LeftSquareBracket)) {
+            if ((!this->match(LeftParenthesis) && !this->match(Period) && !this->match(LeftSquareBracket)) || (this->match(LeftParenthesis) && !this->context->isConstructor && !this->context->isMethodProperty)) {
                 this->throwUnexpectedToken(this->lookahead);
             }
         } else {
@@ -4303,9 +4307,6 @@ public:
                 this->context->isBindingElement = false;
                 this->context->isAssignmentTarget = false;
                 ArgumentVector args = this->parseArguments();
-                if (isFirst && super && !this->context->inClassConstructor) {
-                    this->throwUnexpectedToken(this->lookahead);
-                }
                 bool useSuper = false;
                 if (!isFirst && super) {
                     super->setKind(SuperNode::Kind::Access);
@@ -4355,7 +4356,7 @@ public:
             this->throwUnexpectedToken(this->lookahead);
         }
 
-        return this->finalize(node, new SuperNode(this->match(LeftSquareBracket) ? SuperNode::Kind::Constructor : SuperNode::Kind::Undefined, this->context->inStatic));
+        return this->finalize(node, new SuperNode(this->match(LeftSquareBracket) ? SuperNode::Kind::Constructor : SuperNode::Kind::Undefined, this->context->isStatic));
     }
 
     RefPtr<Node> parseLeftHandSideExpression()
@@ -4367,7 +4368,7 @@ public:
 
         RefPtr<Node> expr;
         RefPtr<SuperNode> super;
-        if (this->matchKeyword(Super) && this->context->inFunctionBody) {
+        if (this->matchKeyword(Super) && this->context->isMethodProperty) {
             expr = parseSuper();
             super = static_cast<SuperNode*>(expr.get());
         } else {
@@ -5859,7 +5860,7 @@ public:
         RefPtr<Node> argument = nullptr;
         if (hasArgument) {
             argument = this->parseExpression();
-        } else if (this->context->inClassConstructor) {
+        } else if (this->context->isConstructor && this->context->isMethodProperty) {
             argument = this->finalize(node, new ThisExpressionNode());
         }
         this->consumeSemicolon();
@@ -6331,14 +6332,15 @@ public:
         bool previousInIteration = this->context->inIteration;
         bool previousInSwitch = this->context->inSwitch;
         bool previousInFunctionBody = this->context->inFunctionBody;
-        bool previousInStatic = this->context->inStatic;
-        bool previousInClassConstructor = this->context->inClassConstructor;
+        bool previousIsStatic = this->context->isStatic;
+        bool previousIsConstructor = this->context->isConstructor;
+        bool previousIsMethodProperty = this->context->isMethodProperty;
 
         this->context->labelSet.clear();
         this->context->inIteration = false;
         this->context->inSwitch = false;
         this->context->inFunctionBody = true;
-        this->context->inStatic = this->scopeContexts.back()->m_inStatic;
+        this->context->isStatic = this->scopeContexts.back()->m_isStatic;
 
         StatementNode* referNode = nullptr;
         while (this->startMarker.index < this->scanner->length) {
@@ -6354,8 +6356,9 @@ public:
         this->context->inIteration = previousInIteration;
         this->context->inSwitch = previousInSwitch;
         this->context->inFunctionBody = previousInFunctionBody;
-        this->context->inStatic = previousInStatic;
-        this->context->inClassConstructor = previousInClassConstructor;
+        this->context->isStatic = previousIsStatic;
+        this->context->isConstructor = previousIsConstructor;
+        this->context->isMethodProperty = previousIsMethodProperty;
 
         scopeContexts.back()->m_locStart.line = nodeStart.line;
         scopeContexts.back()->m_locStart.column = nodeStart.column;
@@ -6410,8 +6413,12 @@ public:
 
         bool previousAllowYield = this->context->allowYield;
         bool previousInArrowFunction = this->context->inArrowFunction;
+        bool previousIsConstructor = this->context->isConstructor;
+        bool previousIsMethodProperty = this->context->isMethodProperty;
         this->context->allowYield = !isGenerator;
         this->context->inArrowFunction = false;
+        this->context->isConstructor = true;
+        this->context->isMethodProperty = false;
 
         this->expect(LeftParenthesis);
         ParseFormalParametersResult formalParameters = this->parseFormalParameters(firstRestricted);
@@ -6439,6 +6446,8 @@ public:
         this->context->strict = previousStrict;
         this->context->allowYield = previousAllowYield;
         this->context->inArrowFunction = previousInArrowFunction;
+        this->context->isConstructor = previousIsConstructor;
+        this->context->isMethodProperty = previousIsMethodProperty;
 
         if (this->context->inDirectCatchScope) {
             scopeContexts.back()->m_needsSpecialInitialize = true;
@@ -6469,8 +6478,13 @@ public:
 
         bool previousAllowYield = this->context->allowYield;
         bool previousInArrowFunction = this->context->inArrowFunction;
+        bool previousIsConstructor = this->context->isConstructor;
+        bool previousIsMethodProperty = this->context->isMethodProperty;
+
         this->context->allowYield = !isGenerator;
         this->context->inArrowFunction = false;
+        this->context->isConstructor = true;
+        this->context->isMethodProperty = false;
 
         if (!this->match(LeftParenthesis)) {
             RefPtr<ScannerResult> token = this->lookahead;
@@ -6522,6 +6536,8 @@ public:
         this->context->strict = previousStrict;
         this->context->allowYield = previousAllowYield;
         this->context->inArrowFunction = previousInArrowFunction;
+        this->context->isConstructor = previousIsConstructor;
+        this->context->isMethodProperty = previousIsMethodProperty;
 
         return this->finalize(node, new FunctionExpressionNode(fnName, std::move(params), body.get(), popScopeContext(node), isGenerator));
     }
@@ -6594,9 +6610,15 @@ public:
         bool isGenerator = false;
         ParseFormalParametersResult params(PatternNodeVector(), nullptr, nullptr, nullptr);
         bool previousAllowYield = this->context->allowYield;
+        bool previousIsMethodProperty = this->context->isMethodProperty;
+        bool previousIsConstructor = this->context->isConstructor;
         this->context->allowYield = false;
+        this->context->isMethodProperty = true;
+        this->context->isConstructor = false;
         RefPtr<Node> method = this->parsePropertyMethod(params);
         this->context->allowYield = previousAllowYield;
+        this->context->isMethodProperty = previousIsMethodProperty;
+        this->context->isConstructor = previousIsConstructor;
 
         extractNamesFromFunctionParams(params.params);
         return this->finalize(node, new FunctionExpressionNode(AtomicString(), std::move(params.params), method.get(), popScopeContext(node), isGenerator));
@@ -6610,7 +6632,9 @@ public:
 
         bool isGenerator = false;
         bool previousAllowYield = this->context->allowYield;
+        bool previousIsMethodProperty = this->context->isMethodProperty;
         this->context->allowYield = false;
+        this->context->isMethodProperty = true;
 
         this->expect(LeftParenthesis);
         if (this->match(RightParenthesis)) {
@@ -6623,6 +6647,7 @@ public:
         ParseFormalParametersResult options2(std::move(options.params), options.stricted, options.firstRestricted, options.message);
         RefPtr<Node> method = this->parsePropertyMethod(options2);
         this->context->allowYield = previousAllowYield;
+        this->context->isMethodProperty = previousIsMethodProperty;
 
         extractNamesFromFunctionParams(options.params);
         return this->finalize(node, new FunctionExpressionNode(AtomicString(), std::move(options.params), method.get(), popScopeContext(node), isGenerator));
@@ -6685,7 +6710,9 @@ public:
         RefPtr<ScannerResult> token = this->lookahead;
         MetaNode node = this->createNode();
 
-        const bool previousInStatic = this->context->inStatic;
+        const bool previousIsStatic = this->context->isStatic;
+        const bool previousIsConstructor = this->context->isConstructor;
+        this->context->isConstructor = false;
 
         PropertyNode::Kind kind = PropertyNode::Kind::None;
         RefPtr<Node> key; //'': Node.PropertyKey;
@@ -6703,7 +6730,7 @@ public:
             IdentifierNode* id = key->isIdentifier() ? key->asIdentifier() : nullptr;
             if (id && id->name() == "static" && (this->qualifiedPropertyName(this->lookahead) || this->match(Multiply))) {
                 token = this->lookahead;
-                this->context->inStatic = isStatic = true;
+                this->context->isStatic = isStatic = true;
                 computed = this->match(LeftSquareBracket);
                 if (this->match(Multiply)) {
                     this->nextToken();
@@ -6734,12 +6761,10 @@ public:
             method = true;
         }
         if (kind == PropertyNode::Kind::None && key && this->match(LeftParenthesis)) {
-            bool previousInClassConstructor = this->context->inClassConstructor;
-            this->context->inClassConstructor = !isStatic && this->isPropertyKey(key.get(), "constructor");
+            this->context->isConstructor = !isStatic && this->isPropertyKey(key.get(), "constructor");
             kind = PropertyNode::Kind::Init;
             value = this->parsePropertyMethodFunction();
             method = true;
-            this->context->inClassConstructor = previousInClassConstructor;
         }
 
         if (kind == PropertyNode::Kind::None) {
@@ -6766,7 +6791,8 @@ public:
                 kind = PropertyNode::Kind::Constructor;
             }
         }
-        this->context->inStatic = previousInStatic;
+        this->context->isStatic = previousIsStatic;
+        this->context->isConstructor = previousIsConstructor;
         return this->finalize(node, new MethodDefinitionNode(key.get(), computed, value.get(), kind, isStatic));
     }
 
@@ -6789,9 +6815,12 @@ public:
 
     RefPtr<ClassBodyNode> parseClassBody()
     {
+        bool previousIsMethodProperty = this->context->isMethodProperty;
+        this->context->isMethodProperty = true;
         MetaNode node = this->createNode();
         PropertiesNodeVector elementList = this->parseClassElementList();
 
+        this->context->isMethodProperty = previousIsMethodProperty;
         return this->finalize(node, new ClassBodyNode(std::move(elementList)));
     }
 
@@ -6853,7 +6882,7 @@ public:
     RefPtr<ProgramNode> parseProgram()
     {
         MetaNode node = this->createNode();
-        scopeContexts.push_back(new ASTScopeContext(this->context->strict, this->context->inStatic));
+        scopeContexts.push_back(new ASTScopeContext(this->context->strict, this->context->isStatic));
         RefPtr<StatementContainer> body = this->parseDirectivePrologues();
         StatementNode* referNode = nullptr;
         while (this->startMarker.index < this->scanner->length) {
@@ -7105,14 +7134,18 @@ public:
     */
 };
 
-RefPtr<ProgramNode> parseProgram(::Escargot::Context* ctx, StringView source, ParserASTNodeHandler handler, bool strictFromOutside, bool inStaticFromOutsize, bool inClassConstructor, size_t stackRemain)
-{
+
+RefPtr<ProgramNode> parseProgram(::Escargot::Context* ctx, StringView source, ParserASTNodeHandler handler, bool strictFromOutside, InterpretedCodeBlock* parentCodeBlock, size_t stackRemain) {
     Parser parser(ctx, source, handler, stackRemain);
     parser.context->strict = strictFromOutside;
-    parser.context->inStatic = inStaticFromOutsize;
-    parser.context->inClassConstructor = inClassConstructor;
-    if (parser.context->inClassConstructor) {
-        parser.context->inFunctionBody = true;
+    if (parentCodeBlock) {
+        parser.context->isStatic = parentCodeBlock->isStatic();
+        parser.context->isConstructor = parentCodeBlock->isConstructor();
+        parser.context->isMethodProperty = parentCodeBlock->isMethodProperty();
+    } else {
+        parser.context->isStatic = false;
+        parser.context->isConstructor = true;
+        parser.context->isMethodProperty = false;
     }
     RefPtr<ProgramNode> nd = parser.parseProgram();
     return nd;
@@ -7124,8 +7157,9 @@ std::tuple<RefPtr<Node>, ASTScopeContext*> parseSingleFunction(::Escargot::Conte
     parser.trackUsingNames = false;
     parser.config.parseSingleFunction = true;
     parser.config.parseSingleFunctionTarget = codeBlock;
-    parser.context->inClassConstructor = codeBlock->isClassConstructorCodeBlock();
-    auto scopeCtx = new ASTScopeContext(codeBlock->isStrict(), codeBlock->inStatic());
+    parser.context->isConstructor = codeBlock->isConstructor();
+    parser.context->isMethodProperty = codeBlock->isMethodProperty();
+    auto scopeCtx = new ASTScopeContext(codeBlock->isStrict(), codeBlock->isStatic());
     parser.scopeContexts.pushBack(scopeCtx);
     RefPtr<Node> nd;
     if (codeBlock->isArrowFunctionExpression()) {

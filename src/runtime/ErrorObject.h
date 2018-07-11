@@ -89,6 +89,7 @@ extern const char* errorMessage_GlobalObject_ConstructorRequiresNew;
 extern const char* errorMessage_GlobalObject_CalledOnIncompatibleReceiver;
 extern const char* errorMessage_GlobalObject_IllegalFirstArgument;
 extern const char* errorMessage_String_InvalidStringLength;
+extern const char* errorMessage_Class_NotCallable;
 
 class ErrorObject : public Object {
 public:

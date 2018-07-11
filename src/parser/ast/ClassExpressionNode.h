@@ -214,6 +214,8 @@ public:
                         keyString = ctx->staticStrings().numbers[num].string();
 
                     keyString = ctx->staticStrings().dtoa(num);
+                } else if (val.isString()) {
+                    keyString = val.asString();
 
                 } else {
                     // TODO check possible types and support other types of name
