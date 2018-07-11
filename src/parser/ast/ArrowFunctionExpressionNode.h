@@ -37,6 +37,12 @@ public:
     {
     }
 
+    ArrowParameterPlaceHolderNode(Node* param)
+        : Node()
+    {
+        m_params.push_back(param);
+    }
+
     ExpressionNodeVector& params()
     {
         return m_params;

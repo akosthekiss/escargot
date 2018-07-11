@@ -55,7 +55,9 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
                                              scopeCtx->m_locStart,
                                              scopeCtx->m_isStrict,
                                              scopeCtx->m_inStatic,
-                                             scopeCtx->m_functionName, scopeCtx->m_parameters, scopeCtx->m_names, parentCodeBlock,
+                                             scopeCtx->m_functionName,
+                                             scopeCtx->m_restName,
+                                             scopeCtx->m_parameters, scopeCtx->m_names, parentCodeBlock,
                                              (CodeBlock::CodeBlockInitFlag)((scopeCtx->m_hasEval ? CodeBlock::CodeBlockHasEval : 0)
                                                                             | (scopeCtx->m_hasWith ? CodeBlock::CodeBlockHasWith : 0)
                                                                             | (scopeCtx->m_hasCatch ? CodeBlock::CodeBlockHasCatch : 0)
@@ -94,14 +96,29 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
         bool hasCapturedIdentifier = false;
         AtomicString arguments = ctx->staticStrings().arguments;
         AtomicString stringThis = ctx->staticStrings().stringThis;
-        for (size_t i = 0; i < scopeCtx->m_usingNames.size(); i++) {
-            AtomicString uname = scopeCtx->m_usingNames[i];
-            if (uname == arguments) {
-                if (UNLIKELY(codeBlock->hasParameter(arguments))) {
-                    continue;
-                } else {
-                    if (LIKELY(!codeBlock->isArrowFunctionExpression())) {
+        if (!codeBlock->isArrowFunctionExpression()) {
+            for (size_t i = 0; i < scopeCtx->m_usingNames.size(); i++) {
+                AtomicString uname = scopeCtx->m_usingNames[i];
+                if (uname == arguments) {
+                    if (LIKELY(!codeBlock->hasParameter(arguments))) {
                         codeBlock->captureArguments();
+                    }
+                } else if (!codeBlock->hasName(uname)) {
+                    InterpretedCodeBlock* c = codeBlock->parentCodeBlock();
+                    while (c) {
+                        if (c->tryCaptureIdentifiersFromChildCodeBlock(uname)) {
+                            hasCapturedIdentifier = true;
+                            break;
+                        }
+                        c = c->parentCodeBlock();
+                    }
+                }
+            }
+        } else {
+            for (size_t i = 0; i < scopeCtx->m_usingNames.size(); i++) {
+                AtomicString uname = scopeCtx->m_usingNames[i];
+                if (uname == arguments) {
+                    if (UNLIKELY(codeBlock->hasParameter(arguments))) {
                         continue;
                     } else {
                         InterpretedCodeBlock* c = codeBlock->parentCodeBlock();
@@ -115,25 +132,24 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
                             c = c->parentCodeBlock();
                         }
                     }
-                }
-            } else if (uname == stringThis) {
-                ASSERT(codeBlock->isArrowFunctionExpression());
-                if (!codeBlock->parentCodeBlock()->isGlobalScopeCodeBlock()) {
-                    codeBlock->parentCodeBlock()->captureThis();
-                    codeBlock->setNeedToLoadThisValue();
-                    hasCapturedIdentifier = true;
-                }
-                continue;
-            }
-
-            if (!codeBlock->hasName(uname)) {
-                InterpretedCodeBlock* c = codeBlock->parentCodeBlock();
-                while (c) {
-                    if (c->tryCaptureIdentifiersFromChildCodeBlock(uname)) {
+                } else if (uname == stringThis) {
+                    if (!codeBlock->parentCodeBlock()->isGlobalScopeCodeBlock()) {
+                        codeBlock->parentCodeBlock()->captureThis();
+                        codeBlock->setNeedToLoadThisValue();
                         hasCapturedIdentifier = true;
-                        break;
                     }
-                    c = c->parentCodeBlock();
+                    continue;
+                }
+
+                if (!codeBlock->hasName(uname)) {
+                    InterpretedCodeBlock* c = codeBlock->parentCodeBlock();
+                    while (c) {
+                        if (c->tryCaptureIdentifiersFromChildCodeBlock(uname)) {
+                            hasCapturedIdentifier = true;
+                            break;
+                        }
+                        c = c->parentCodeBlock();
+                    }
                 }
             }
         }

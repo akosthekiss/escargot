@@ -166,6 +166,7 @@ ByteCodeBlock* ByteCodeGenerator::generateByteCode(Context* c, InterpretedCodeBl
 
     // load/store this value first
     if (codeBlock->needToLoadThisValue()) {
+        ASSERT(codeBlock->isArrowFunctionExpression());
         generateLoadThisValueByteCode(block, &ctx);
     }
 

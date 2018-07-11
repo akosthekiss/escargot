@@ -25,6 +25,7 @@
 #include "interpreter/ByteCode.h"
 #include "interpreter/ByteCodeGenerator.h"
 #include "interpreter/ByteCodeInterpreter.h"
+#include "runtime/ArrayObject.h"
 #include "runtime/Environment.h"
 #include "runtime/EnvironmentRecord.h"
 #include "runtime/ErrorObject.h"
@@ -463,6 +464,10 @@ Value FunctionObject::processCall(ExecutionState& state, const Value& receiverSr
         generateArgumentsObject(newState, record, stackStorage);
     }
 
+    if (UNLIKELY(m_codeBlock->usesRestArray())) {
+        generateRestArray(newState, record, stackStorage, argc, argv);
+    }
+
     // run function
     size_t unused;
     const Value returnValue = ByteCodeInterpreter::interpret(newState, blk, 0, registerFile, &unused);
@@ -487,6 +492,7 @@ void FunctionObject::generateArgumentsObject(ExecutionState& state, FunctionEnvi
         for (size_t i = 0; i < v.size(); i++) {
             if (v[i].m_name == arguments) {
                 if (v[i].m_needToAllocateOnStack) {
+                    ASSERT(stackStorage);
                     stackStorage[v[i].m_indexForIndexedStorage] = fnRecord->createArgumentsObject(state, state.executionContext());
                 } else {
                     ASSERT(fnRecord->isFunctionEnvironmentRecordOnHeap());
@@ -495,6 +501,47 @@ void FunctionObject::generateArgumentsObject(ExecutionState& state, FunctionEnvi
                 break;
             }
         }
+    }
+}
+
+void FunctionObject::generateRestArray(ExecutionState& state, FunctionEnvironmentRecord* fnRecord, Value* stackStorage, const size_t& argc, Value* argv)
+{
+    InterpretedCodeBlock* blk = fnRecord->functionObject()->codeBlock()->asInterpretedCodeBlock();
+    AtomicString restName = blk->restName();
+
+    ArrayObject* arr = new ArrayObject(state);
+
+    if (fnRecord->isFunctionEnvironmentRecordNotIndexed()) {
+        auto result = fnRecord->hasBinding(state, restName);
+        if (UNLIKELY(result.m_index == SIZE_MAX)) {
+            fnRecord->createBinding(state, restName, false, true);
+            result = fnRecord->hasBinding(state, restName);
+        }
+        fnRecord->initializeBinding(state, restName, arr);
+    } else {
+        const CodeBlock::IdentifierInfoVector& v = blk->identifierInfos();
+        for (size_t i = 0; i < v.size(); i++) {
+            if (v[i].m_name == restName) {
+                if (v[i].m_needToAllocateOnStack) {
+                    ASSERT(stackStorage);
+                    stackStorage[v[i].m_indexForIndexedStorage] = arr;
+                } else {
+                    ASSERT(fnRecord->isFunctionEnvironmentRecordOnHeap());
+                    ((FunctionEnvironmentRecordOnHeap*)fnRecord)->m_heapStorage[v[i].m_indexForIndexedStorage] = Value(arr);
+                }
+                break;
+            }
+        }
+    }
+
+    size_t parameterLen = blk->parametersInfomation().size();
+    if (UNLIKELY(parameterLen >= argc)) {
+        return;
+    }
+
+    size_t arrLen = argc - parameterLen;
+    for (size_t i = 0; i < arrLen; i++) {
+        arr->defineOwnProperty(state, ObjectPropertyName(state, Value(i)), ObjectPropertyDescriptor(argv[parameterLen + i], ObjectPropertyDescriptor::AllPresent));
     }
 }
 }

@@ -72,7 +72,8 @@ ArgumentsObject::ArgumentsObject(ExecutionState& state, FunctionEnvironmentRecor
     g_argumentsObjectTag = *((size_t*)this);
 
     InterpretedCodeBlock* blk = record->functionObject()->codeBlock()->asInterpretedCodeBlock();
-    bool isStrict = blk->isStrict();
+    bool isUnmapped = blk->usesRestArray();
+    bool isStrict = blk->isStrict() || isUnmapped;
 
     if (isStrict) {
         m_structure = state.context()->defaultStructureForArgumentsObjectInStrictMode();
@@ -105,12 +106,16 @@ ArgumentsObject::ArgumentsObject(ExecutionState& state, FunctionEnvironmentRecor
     m_targetRecord = record;
     m_codeBlock = blk;
 
-    while (indx >= 0) {
+    for (; indx >= 0; indx--) {
         // Let val be the element of args at 0-origined list position indx.
         Value val = record->argv()[indx];
         // Call the [[DefineOwnProperty]] internal method on obj passing ToString(indx), the property descriptor {[[Value]]: val, [[Writable]]: true, [[Enumerable]]: true, [[Configurable]]: true}, and false as arguments.
         m_argumentPropertyInfo[indx].first = val;
         m_argumentPropertyInfo[indx].second = AtomicString();
+
+        if (UNLIKELY(isUnmapped)) {
+            continue;
+        }
 
         // If indx is less than the number of elements in names, then
         if ((size_t)indx < blk->parametersInfomation().size()) {
@@ -129,8 +134,6 @@ ArgumentsObject::ArgumentsObject(ExecutionState& state, FunctionEnvironmentRecor
                 m_argumentPropertyInfo[indx].second = name;
             }
         }
-        // Let indx = indx - 1
-        indx--;
     }
 
     // If strict is false, then

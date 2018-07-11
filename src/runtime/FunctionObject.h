@@ -138,6 +138,7 @@ protected:
     Value processCall(ExecutionState& state, const Value& receiver, const size_t& argc, Value* argv, bool isNewExpression);
     static Value callSlowCase(ExecutionState& state, const Value& callee, const Value& receiver, const size_t& argc, Value* argv, bool isNewExpression);
     void generateArgumentsObject(ExecutionState& state, FunctionEnvironmentRecord* fnRecord, Value* stackStorage);
+    void generateRestArray(ExecutionState& state, FunctionEnvironmentRecord* fnRecord, Value* stackStorage, const size_t& argc, Value* argv);
     void generateBytecodeBlock(ExecutionState& state);
     CodeBlock* m_codeBlock;
     LexicalEnvironment* m_outerEnvironment;

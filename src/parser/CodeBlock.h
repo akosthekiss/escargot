@@ -243,6 +243,11 @@ public:
         return m_usesArgumentsObject;
     }
 
+    bool usesRestArray() const
+    {
+        return m_restName.string()->length();
+    }
+
     void setFunctionName(AtomicString name)
     {
         m_functionName = name;
@@ -251,6 +256,11 @@ public:
     AtomicString functionName() const
     {
         return m_functionName;
+    }
+
+    AtomicString restName() const
+    {
+        return m_restName;
     }
 
     bool needsComplexParameterCopy() const
@@ -367,6 +377,7 @@ protected:
     uint16_t m_parameterCount;
 
     AtomicString m_functionName;
+    AtomicString m_restName;
 
     union {
         Node* m_cachedASTNode;
@@ -616,7 +627,7 @@ protected:
     // init global codeBlock
     InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, bool inStatic, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags);
     // init function codeBlock
-    InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool inStatic, AtomicString functionName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags);
+    InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool inStatic, AtomicString functionName, AtomicString restName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags);
     // default constructor
     InterpretedCodeBlock(Context* ctx, Script* script, Node* name, bool hasSuperClass, InterpretedCodeBlock* parentBlock, ExtendedNodeLOC sourceElementStart);
 

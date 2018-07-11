@@ -304,8 +304,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = false;
 }
 
-InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool inStatic, AtomicString functionName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers,
-                                           InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags)
+InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool inStatic, AtomicString functionName, AtomicString restName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags)
     : m_sourceElementStart(sourceElementStart)
     , m_identifierOnStackCount(0)
     , m_identifierOnHeapCount(0)
@@ -322,6 +321,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_byteCodeBlock = nullptr;
 
     m_functionName = functionName;
+    m_restName = restName;
     m_parametersInfomation.resizeWithUninitializedValues(parameterNames.size());
     for (size_t i = 0; i < parameterNames.size(); i++) {
         m_parametersInfomation[i].m_name = parameterNames[i];
@@ -689,7 +689,7 @@ void InterpretedCodeBlock::computeVariables()
 }
 
 InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, Node* name, bool hasSuperClass, InterpretedCodeBlock* parentBlock, ExtendedNodeLOC sourceElementStart)
-    : InterpretedCodeBlock(ctx, script, StringView(), sourceElementStart, true, false, AtomicString(), AtomicStringTightVector(), ASTScopeContextNameInfoVector(), parentBlock, CodeBlockInitFlag::CodeBlockIsFunctionExpression)
+    : InterpretedCodeBlock(ctx, script, StringView(), sourceElementStart, true, false, AtomicString(), AtomicString(), AtomicStringTightVector(), ASTScopeContextNameInfoVector(), parentBlock, CodeBlockInitFlag::CodeBlockIsFunctionExpression)
 {
     if (name && name->isIdentifier()) {
         m_functionName = name->asIdentifier()->name();

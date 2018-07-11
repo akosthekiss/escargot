@@ -183,6 +183,13 @@ Value Script::executeLocal(ExecutionState& state, Value thisValue, InterpretedCo
         }
     }
 
+    if (!isOnGlobal && m_topCodeBlock->usesRestArray()) {
+        AtomicString restName = m_topCodeBlock->restName();
+        if (fnRecord->hasBinding(newState, restName).m_index == SIZE_MAX) {
+            fnRecord->functionObject()->generateRestArray(newState, fnRecord, nullptr, fnRecord->argc(), fnRecord->argv());
+        }
+    }
+
     size_t unused;
     Value resultValue = ByteCodeInterpreter::interpret(newState, m_topCodeBlock->byteCodeBlock(), 0, registerFile, &unused);
     clearStack<512>();

@@ -2573,9 +2573,15 @@ public:
         if (this->config.parseSingleFunction)
             return;
         for (size_t i = 0; i < vector.size(); i++) {
-            ASSERT(vector[i]->isIdentifier());
-            IdentifierNode* id = (IdentifierNode*)vector[i].get();
-            scopeContexts.back()->insertName(id->name(), true);
+            if (LIKELY(vector[i]->isIdentifier())) {
+                IdentifierNode* id = (IdentifierNode*)vector[i].get();
+                scopeContexts.back()->insertName(id->name(), true);
+            } else if (vector[i]->type() == RestElement) {
+                IdentifierNode* id = ((RestElementNode*)vector[i].get())->argument();
+                scopeContexts.back()->insertName(id->name(), true);
+            } else {
+                ASSERT_NOT_REACHED();
+            }
         }
     }
 
@@ -2591,12 +2597,26 @@ public:
         scopeContexts.back()->m_functionName = functionName;
         scopeContexts.back()->m_inCatch = this->context->inCatch;
         scopeContexts.back()->m_inWith = this->context->inWith;
-        scopeContexts.back()->m_parameters.resizeWithUninitializedValues(params.size());
-        for (size_t i = 0; i < params.size(); i++) {
+
+        bool hasRest = false;
+        if (params.size() > 0 && params[params.size() - 1]->type() == RestElement) {
+            hasRest = true;
+        }
+        size_t paramSize = hasRest ? params.size() - 1 : params.size();
+        scopeContexts.back()->m_parameters.resizeWithUninitializedValues(paramSize);
+        for (size_t i = 0; i < paramSize; i++) {
             ASSERT(params[i]->isIdentifier());
             IdentifierNode* id = (IdentifierNode*)params[i].get();
             scopeContexts.back()->m_parameters[i] = id->name();
         }
+
+        if (hasRest) {
+            ASSERT(params[paramSize]->type() == RestElement);
+            ASSERT(!scopeContexts.back()->m_restName.string()->length());
+            IdentifierNode* id = ((RestElementNode*)params[paramSize].get())->argument();
+            scopeContexts.back()->m_restName = id->name();
+        }
+
         if (parentContext) {
             parentContext->m_childScopes.push_back(scopeContexts.back());
         }
@@ -3368,8 +3388,6 @@ public:
 
     RefPtr<RestElementNode> parseRestElement(std::vector<RefPtr<ScannerResult>, GCUtil::gc_malloc_ignore_off_page_allocator<RefPtr<ScannerResult>>>& params)
     {
-        this->throwError("Rest element is not supported yet");
-
         this->nextToken();
         if (this->match(LeftBrace)) {
             this->throwError(Messages::ObjectPatternAsRestParameter);
@@ -3505,7 +3523,6 @@ public:
         MetaNode node = this->createNode();
 
         RefPtr<Node> arg = this->inheritCoverGrammar(&Parser::parseAssignmentExpression);
-        this->throwError("Spread element is not supported yet");
         return this->finalize(node, new SpreadElementNode(arg.get()));
     }
 
@@ -4003,31 +4020,66 @@ public:
     void reinterpretExpressionAsPattern(Node* expr)
     {
         switch (expr->type()) {
+        case Identifier:
+        case MemberExpression:
+        case RestElement:
+            //case AssignmentPattern:
+            break;
+        /*
+            case SpreadElement:
+                expr->type = RestElement;
+                this->reinterpretExpressionAsPattern(expr.argument);
+                break;
+            case ArrayExpression:
+                expr->type = ArrayPattern;
+                for (let i = 0; i < expr.elements.length; i++) {
+                    if (expr.elements[i] !== null) {
+                        this->reinterpretExpressionAsPattern(expr.elements[i]);
+                    }
+                }
+                break;
+            case ObjectExpression:
+                expr->type = ObjectPattern;
+                for (size_t i = 0; i < expr.properties.length; i++) {
+                    this->reinterpretExpressionAsPattern(expr.properties[i].value);
+                }
+                break;
+            case AssignmentExpression:
+                expr->type = AssignmentPattern;
+                delete expr.operator;
+                this->reinterpretExpressionAsPattern(expr.left);
+                break;
+                */
+        default:
+            // Allow other node type for tolerant parsing.
+            break;
+        }
+
+        /*
+        switch (expr->type()) {
+
         case ArrayExpression:
             this->throwError("Array pattern is not supported yet");
             RELEASE_ASSERT_NOT_REACHED();
-            /* TODO(ES6) this part is only for es6
             expr.type = Syntax.ArrayPattern;
             for (let i = 0; i < expr.elements.length; i++) {
                 if (expr.elements[i] !== null) {
                     this->reinterpretExpressionAsPattern(expr.elements[i]);
                 }
             }
-            */
             break;
         case ObjectExpression:
             this->throwError("Object pattern is not supported yet");
             RELEASE_ASSERT_NOT_REACHED();
-            /* TODO(ES6) this part is only for es6
             expr.type = Syntax.ObjectPattern;
             for (let i = 0; i < expr.properties.length; i++) {
                 this->reinterpretExpressionAsPattern(expr.properties[i].value);
             }
-            */
             break;
         default:
             break;
         }
+    */
     }
 
     RefPtr<Node> parseGroupExpression()
@@ -4040,74 +4092,101 @@ public:
             if (!this->match(Arrow)) {
                 this->expect(Arrow);
             }
-
-            //TODO
             expr = this->finalize(this->startNode(this->lookahead), new ArrowParameterPlaceHolderNode());
         } else {
             RefPtr<ScannerResult> startToken = this->lookahead;
-
-            bool arrow = false;
-            this->context->isBindingElement = true;
-            expr = this->inheritCoverGrammar(&Parser::parseAssignmentExpression);
-
-            if (this->match(Comma)) {
-                ExpressionNodeVector expressions;
-
-                this->context->isAssignmentTarget = false;
-                expressions.push_back(expr);
-                while (this->startMarker.index < this->scanner->length) {
-                    if (!this->match(Comma)) {
-                        break;
-                    }
-                    this->nextToken();
-
-                    expressions.push_back(this->inheritCoverGrammar(&Parser::parseAssignmentExpression));
-                }
-                if (!arrow) {
-                    expr = this->finalize(this->startNode(startToken), new SequenceExpressionNode(std::move(expressions)));
-                }
-            }
-
-            if (!arrow) {
+            std::vector<RefPtr<ScannerResult>, GCUtil::gc_malloc_ignore_off_page_allocator<RefPtr<ScannerResult>>> params;
+            if (this->match(PeriodPeriodPeriod)) {
+                expr = this->parseRestElement(params);
                 this->expect(RightParenthesis);
-                if (this->match(Arrow)) {
-                    if (expr->type() == Identifier && expr->asIdentifier()->name() == "yield") {
-                        this->throwError("Yield property is not supported yet");
-                        RELEASE_ASSERT_NOT_REACHED();
-                        /*
-                        arrow = true;
-                        expr = this->finalize(this->startNode(startToken), new ArrowParameterPlaceHolderNode());
-                        expr = {
-                            type: ArrowParameterPlaceHolder,
-                            params: [expr],
-                        };
-                        */
-                    }
-                    if (!arrow) {
-                        if (!this->context->isBindingElement) {
-                            this->throwUnexpectedToken(this->lookahead);
+                if (!this->match(Arrow)) {
+                    this->expect(Arrow);
+                }
+                expr = this->finalize(this->startNode(this->lookahead), new ArrowParameterPlaceHolderNode(expr.get()));
+            } else {
+                bool arrow = false;
+                this->context->isBindingElement = true;
+                expr = this->inheritCoverGrammar(&Parser::parseAssignmentExpression);
+
+                if (this->match(Comma)) {
+                    ExpressionNodeVector expressions;
+
+                    this->context->isAssignmentTarget = false;
+                    expressions.push_back(expr);
+                    while (this->startMarker.index < this->scanner->length) {
+                        if (!this->match(Comma)) {
+                            break;
                         }
-                        if (expr->type() == SequenceExpression) {
-                            const ExpressionNodeVector& expressions = ((SequenceExpressionNode*)expr.get())->expressions();
+                        this->nextToken();
+
+                        if (this->match(PeriodPeriodPeriod)) {
+                            if (!this->context->isBindingElement) {
+                                this->throwUnexpectedToken(this->lookahead);
+                            }
+                            expressions.push_back(this->parseRestElement(params));
+                            this->expect(RightParenthesis);
+                            if (!this->match(Arrow)) {
+                                this->expect(Arrow);
+                            }
+                            this->context->isBindingElement = false;
                             for (size_t i = 0; i < expressions.size(); i++) {
                                 this->reinterpretExpressionAsPattern(expressions[i].get());
                             }
+                            arrow = true;
+                            expr = this->finalize(this->startNode(this->lookahead), new ArrowParameterPlaceHolderNode(std::move(expressions)));
                         } else {
-                            this->reinterpretExpressionAsPattern(expr.get());
+                            expressions.push_back(this->inheritCoverGrammar(&Parser::parseAssignmentExpression));
                         }
-
-                        //TODO
-                        ExpressionNodeVector params;
-                        if (expr->type() == SequenceExpression) {
-                            params = ((SequenceExpressionNode*)expr.get())->expressions();
-                        } else {
-                            params.push_back(expr);
+                        if (arrow) {
+                            break;
                         }
-
-                        expr = this->finalize(this->startNode(this->lookahead), new ArrowParameterPlaceHolderNode(std::move(params)));
+                    }
+                    if (!arrow) {
+                        expr = this->finalize(this->startNode(startToken), new SequenceExpressionNode(std::move(expressions)));
                     }
                 }
-                this->context->isBindingElement = false;
+
+                if (!arrow) {
+                    this->expect(RightParenthesis);
+                    if (this->match(Arrow)) {
+                        if (expr->type() == Identifier && expr->asIdentifier()->name() == "yield") {
+                            this->throwError("Yield property is not supported yet");
+                            RELEASE_ASSERT_NOT_REACHED();
+                            /*
+                            arrow = true;
+                            expr = this->finalize(this->startNode(startToken), new ArrowParameterPlaceHolderNode());
+                            expr = {
+                                type: ArrowParameterPlaceHolder,
+                                params: [expr],
+                            };
+                            */
+                        }
+                        if (!arrow) {
+                            if (!this->context->isBindingElement) {
+                                this->throwUnexpectedToken(this->lookahead);
+                            }
+
+                            if (expr->type() == SequenceExpression) {
+                                const ExpressionNodeVector& expressions = ((SequenceExpressionNode*)expr.get())->expressions();
+                                for (size_t i = 0; i < expressions.size(); i++) {
+                                    this->reinterpretExpressionAsPattern(expressions[i].get());
+                                }
+                            } else {
+                                this->reinterpretExpressionAsPattern(expr.get());
+                            }
+
+                            ExpressionNodeVector params;
+                            if (expr->type() == SequenceExpression) {
+                                params = ((SequenceExpressionNode*)expr.get())->expressions();
+                            } else {
+                                params.push_back(expr);
+                            }
+
+                            expr = this->finalize(this->startNode(this->lookahead), new ArrowParameterPlaceHolderNode(std::move(params)));
+                        }
+                    }
+                    this->context->isBindingElement = false;
+                }
             }
         }
 
