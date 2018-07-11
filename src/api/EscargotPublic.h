@@ -449,7 +449,7 @@ public:
     bool hasOwnProperty(ExecutionStateRef* state, ValueRef* propertyName);
 
     ValueRef* getPrototype(ExecutionStateRef* state);
-    ObjectRef* getPrototypeObject(); // if __proto__ is not object(undefined or null), this function returns nullptr instead of orginal value.
+    ObjectRef* getPrototypeObject(ExecutionStateRef* state); // if __proto__ is not object(undefined or null), this function returns nullptr instead of orginal value.
     void setPrototype(ExecutionStateRef* state, ValueRef* value);
 
     ValueVectorRef* getOwnPropertyKeys(ExecutionStateRef* state);

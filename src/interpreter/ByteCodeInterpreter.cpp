@@ -1426,7 +1426,7 @@ TestCache:
                 currentCacheIndex++;
                 goto TestCache;
             }
-            Object* protoObject = obj->getPrototypeObject();
+            Object* protoObject = obj->getPrototypeObject(state);
             if (protoObject != nullptr) {
                 obj = protoObject;
             } else {
@@ -1489,7 +1489,7 @@ NEVER_INLINE Value ByteCodeInterpreter::getObjectPrecomputedCaseOperationCacheMi
             inlineCache.m_cache[0].m_cachedIndex = idx;
             break;
         }
-        obj = obj->getPrototypeObject();
+        obj = obj->getPrototypeObject(state);
         if (!obj) {
             break;
         }
@@ -1533,7 +1533,7 @@ ALWAYS_INLINE void ByteCodeInterpreter::setObjectPreComputedCaseOperation(Execut
                 miss = true;
                 break;
             } else {
-                Object* o = obj->getPrototypeObject();
+                Object* o = obj->getPrototypeObject(state);
                 if (UNLIKELY(!o)) {
                     miss = true;
                     break;

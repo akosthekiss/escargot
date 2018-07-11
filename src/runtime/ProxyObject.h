@@ -51,6 +51,9 @@ public:
         return false;
     }
 
+    Value getPrototype(ExecutionState&) override;
+    Object* getPrototypeObject(ExecutionState&) override;
+
     void setTarget(Object* target)
     {
         m_target = target;

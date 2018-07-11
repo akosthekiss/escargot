@@ -780,9 +780,9 @@ ValueRef* ObjectRef::getPrototype(ExecutionStateRef* state)
     return toRef(toImpl(this)->getPrototype(*toImpl(state)));
 }
 
-ObjectRef* ObjectRef::getPrototypeObject()
+ObjectRef* ObjectRef::getPrototypeObject(ExecutionStateRef* state)
 {
-    return toRef(toImpl(this)->getPrototypeObject());
+    return toRef(toImpl(this)->getPrototypeObject(*toImpl(state)));
 }
 
 void ObjectRef::setPrototype(ExecutionStateRef* state, ValueRef* value)

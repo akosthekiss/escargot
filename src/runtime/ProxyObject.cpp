@@ -34,6 +34,87 @@ ProxyObject::ProxyObject(ExecutionState& state)
 {
 }
 
+Object* ProxyObject::getPrototypeObject(ExecutionState& state)
+{
+    if (!this->target()) {
+        return nullptr;
+    }
+
+    Value result = getPrototype(state);
+    if (result.isObject()) {
+        return result.asObject();
+    }
+
+    return nullptr;
+}
+
+// https://www.ecma-international.org/ecma-262/8.0/index.html#sec-proxy-object-internal-methods-and-internal-slots-getprototypeof
+Value ProxyObject::getPrototype(ExecutionState& state)
+{
+    auto strings = &state.context()->staticStrings();
+    // 1. Let handler be O.[[ProxyHandler]].
+    Value handler(this->handler());
+
+    // 2. If handler is null, throw a TypeError exception.
+    if (this->handler() == nullptr) {
+        ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy handler can be null.");
+        return Value();
+    }
+
+    // 3. Assert: Type(handler) is Object.
+    ASSERT(handler.isObject());
+
+    // 4. Let target be O.[[ProxyTarget]].
+    Value target(this->target());
+
+    // 5. Let trap be ? GetMethod(handler, "getPrototypeOf").
+    ObjectPropertyName name = ObjectPropertyName(state, strings->getPrototypeOf.string());
+    ObjectGetResult trapResult = handler.asObject()->get(state, name);
+
+    if (trapResult.hasValue()) {
+        Value trap = trapResult.value(state, handler);
+        // 6. If trap is undefined, then
+        if (trap.isUndefined()) {
+            // a. Return ? target.[[GetPrototypeOf]]().
+            return target.asObject()->getPrototype(state);
+        }
+        // 7. Let handlerProto be ? Call(trap, handler, « target »).
+        if (trap.isFunction()) {
+            Value arguments[] = { target };
+            Value handlerProto = FunctionObject::call(state, trap, handler, 1, arguments);
+            // 8. If Type(handlerProto) is neither Object nor Null, throw a TypeError exception.
+            if (!handlerProto.isObject() && !handlerProto.isNull()) {
+                ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy Type Error");
+                return Value();
+            }
+            // 9. Let extensibleTarget be ? IsExtensible(target).
+            bool extensibleTarget = target.asObject()->isExtensible();
+            // 10. If extensibleTarget is true, return handlerProto.
+            if (extensibleTarget) {
+                return handlerProto;
+            }
+
+            // 11. Let targetProto be ? target.[[GetPrototypeOf]]().
+            Value targetProto = target.asObject()->getPrototype(state);
+            // 12. If SameValue(handlerProto, targetProto) is false, throw a TypeError exception.
+            if (handlerProto != targetProto) {
+                ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy Type Error");
+                return Value();
+            }
+
+            // 13. Return handlerProto.
+            return handlerProto;
+        } else {
+            ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy handler's getPrototypeOf trap wasn't undefined, null, or callable");
+            return Value();
+        }
+    } else {
+        return target.asObject()->getPrototype(state);
+    }
+
+    return Value();
+}
+
 // https://www.ecma-international.org/ecma-262/8.0/index.html#sec-proxy-object-internal-methods-and-internal-slots-get-p-receiver
 ObjectGetResult ProxyObject::get(ExecutionState& state, const ObjectPropertyName& propertyName)
 {

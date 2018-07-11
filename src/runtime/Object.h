@@ -590,7 +590,11 @@ public:
         ensureObjectRareData()->m_isExtensible = false;
     }
 
+#if ESCARGOT_ENABLE_PROXY
+    virtual Value getPrototype(ExecutionState&)
+#else
     Value getPrototype(ExecutionState&)
+#endif
     {
         if (LIKELY((size_t)m_prototype > 2)) {
             if (UNLIKELY(g_objectRareDataTag == *((size_t*)(m_prototype)))) {
@@ -613,7 +617,11 @@ public:
         }
     }
 
-    Object* getPrototypeObject()
+#if ESCARGOT_ENABLE_PROXY
+    virtual Object* getPrototypeObject(ExecutionState&)
+#else
+    Object* getPrototypeObject(ExecutionState&)
+#endif
     {
         if (LIKELY((size_t)m_prototype > 2)) {
             if (UNLIKELY(g_objectRareDataTag == *((size_t*)(m_prototype)))) {

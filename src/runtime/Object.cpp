@@ -704,7 +704,7 @@ ObjectGetResult Object::get(ExecutionState& state, const ObjectPropertyName& pro
         if (result.hasValue()) {
             return result;
         }
-        target = target->getPrototypeObject();
+        target = target->getPrototypeObject(state);
         if (!target) {
             return ObjectGetResult();
         }
