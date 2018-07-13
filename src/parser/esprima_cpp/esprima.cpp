@@ -3564,7 +3564,7 @@ public:
 
     // ECMA-262 12.2.6 Object Initializer
 
-    RefPtr<Node> parsePropertyMethod(ParseFormalParametersResult& params)
+    RefPtr<Node> parsePropertyMethod(ParseFormalParametersResult& params, const AtomicString& functionName)
     {
         bool previousInArrowFunction = this->context->inArrowFunction;
 
@@ -3572,7 +3572,7 @@ public:
         this->context->isAssignmentTarget = false;
         this->context->isBindingElement = false;
 
-        pushScopeContext(params.params, AtomicString());
+        pushScopeContext(params.params, functionName);
         extractNamesFromFunctionParams(params.params);
         const bool previousStrict = this->context->strict;
         RefPtr<Node> body = this->isolateCoverGrammar(&Parser::parseFunctionSourceElements);
@@ -3588,7 +3588,7 @@ public:
         return body;
     }
 
-    RefPtr<FunctionExpressionNode> parsePropertyMethodFunction()
+    RefPtr<FunctionExpressionNode> parsePropertyMethodFunction(const AtomicString& functionName)
     {
         const bool isGenerator = false;
         const bool previousAllowYield = this->context->allowYield;
@@ -3596,10 +3596,10 @@ public:
         this->expect(LeftParenthesis);
         MetaNode node = this->createNode();
         ParseFormalParametersResult params = this->parseFormalParameters();
-        RefPtr<Node> method = this->parsePropertyMethod(params);
+        RefPtr<Node> method = this->parsePropertyMethod(params, functionName);
         this->context->allowYield = previousAllowYield;
 
-        return this->finalize(node, new FunctionExpressionNode(AtomicString(), std::move(params.params), method.get(), popScopeContext(node), isGenerator));
+        return this->finalize(node, new FunctionExpressionNode(functionName, std::move(params.params), method.get(), popScopeContext(node), isGenerator));
     }
 
     RefPtr<Node> parseObjectPropertyKey()
@@ -3749,11 +3749,18 @@ public:
                 this->nextToken();
                 value = this->inheritCoverGrammar(&Parser::parseAssignmentExpression);
 
-                /* TODO(ES6) this part is only for es6
             } else if (this->match(LeftParenthesis)) {
-                value = this->parsePropertyMethodFunction();
+                bool previousIsConstructor = this->context->isConstructor;
+                bool previousIsMethodProperty = this->context->isMethodProperty;
+                this->context->isConstructor = false;
+                this->context->isMethodProperty = true;
+                value = this->parsePropertyMethodFunction(key->isIdentifier() ? key->asIdentifier()->name() : AtomicString());
                 method = true;
 
+                this->context->isConstructor = previousIsConstructor;
+                this->context->isMethodProperty = previousIsMethodProperty;
+
+                /* TODO(ES6) this part is only for es6
             } else if (token->type == Token::IdentifierToken) {
                 Node* id = this->finalize(node, finishIdentifier(token, true));
                 if (this->match(Substitution)) {
@@ -6615,7 +6622,7 @@ public:
         this->context->allowYield = false;
         this->context->isMethodProperty = true;
         this->context->isConstructor = false;
-        RefPtr<Node> method = this->parsePropertyMethod(params);
+        RefPtr<Node> method = this->parsePropertyMethod(params, AtomicString());
         this->context->allowYield = previousAllowYield;
         this->context->isMethodProperty = previousIsMethodProperty;
         this->context->isConstructor = previousIsConstructor;
@@ -6645,7 +6652,7 @@ public:
         this->expect(RightParenthesis);
 
         ParseFormalParametersResult options2(std::move(options.params), options.stricted, options.firstRestricted, options.message);
-        RefPtr<Node> method = this->parsePropertyMethod(options2);
+        RefPtr<Node> method = this->parsePropertyMethod(options2, AtomicString());
         this->context->allowYield = previousAllowYield;
         this->context->isMethodProperty = previousIsMethodProperty;
 
@@ -6666,7 +6673,7 @@ public:
         this->context.allowYield = true;
         const params = this->parseFormalParameters();
         this->context.allowYield = false;
-        const method = this->parsePropertyMethod(params);
+        const method = this->parsePropertyMethod(params, AtomicString());
         this->context.allowYield = previousAllowYield;
 
         return this->finalize(node, new Node.FunctionExpression(null, params.params, method, isGenerator));
@@ -6763,7 +6770,7 @@ public:
         if (kind == PropertyNode::Kind::None && key && this->match(LeftParenthesis)) {
             this->context->isConstructor = !isStatic && this->isPropertyKey(key.get(), "constructor");
             kind = PropertyNode::Kind::Init;
-            value = this->parsePropertyMethodFunction();
+            value = this->parsePropertyMethodFunction(AtomicString());
             method = true;
         }
 
