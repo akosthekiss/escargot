@@ -1050,8 +1050,8 @@ Value ByteCodeInterpreter::interpret(ExecutionState& state, ByteCodeBlock* byteC
                 BinaryInOperation* code = (BinaryInOperation*)programCounter;
                 const Value& left = registerFile[code->m_srcIndex0];
                 const Value& right = registerFile[code->m_srcIndex1];
-                auto result = binaryInOperation(state, left, right);
-                registerFile[code->m_dstIndex] = Value(result.hasValue());
+                bool result = binaryInOperation(state, left, right);
+                registerFile[code->m_dstIndex] = Value(result);
                 ADD_PROGRAM_COUNTER(BinaryInOperation);
                 NEXT_INSTRUCTION();
             }
@@ -2003,17 +2003,16 @@ NEVER_INLINE Value ByteCodeInterpreter::withOperation(ExecutionState& state, Wit
     return Value(Value::EmptyValue);
 }
 
-NEVER_INLINE ObjectGetResult ByteCodeInterpreter::binaryInOperation(ExecutionState& state, const Value& left, const Value& right)
+NEVER_INLINE bool ByteCodeInterpreter::binaryInOperation(ExecutionState& state, const Value& left, const Value& right)
 {
-    auto result = ObjectGetResult();
     if (!right.isObject()) {
         ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "type of rvalue is not Object");
-        return result;
+        return false;
     }
 
-    result = right.toObject(state)->get(state, ObjectPropertyName(state, left));
-
-    return result;
+    // https://www.ecma-international.org/ecma-262/5.1/#sec-11.8.7
+    // Return the result of calling the [[HasProperty]] internal method of rval with argument ToString(lval).
+    return right.toObject(state)->hasProperty(state, ObjectPropertyName(state, left));
 }
 
 NEVER_INLINE Value ByteCodeInterpreter::callFunctionInWithScope(ExecutionState& state, CallFunctionInWithScope* code, ExecutionContext* ec, LexicalEnvironment* env, Value* argv)
