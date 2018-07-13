@@ -417,7 +417,7 @@ Value ByteCodeInterpreter::interpret(ExecutionState& state, ByteCodeBlock* byteC
                         if (LIKELY(idx != Value::InvalidArrayIndexValue)) {
                             uint32_t len = arr->getArrayLength(state);
                             if (UNLIKELY(len <= idx)) {
-                                if (UNLIKELY(!arr->isExtensible())) {
+                                if (UNLIKELY(!arr->isExtensible(state))) {
 #if defined(COMPILER_GCC)
                                     goto SetObjectOpcodeSlowCaseOpcodeLbl;
 #else

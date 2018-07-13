@@ -185,6 +185,7 @@ namespace Escargot {
     F(supportedLocalesOf)         \
     F(resolvedOptions)            \
     F(getPrototypeOf)             \
+    F(setPrototypeOf)             \
     F(isPrototypeOf)              \
     F(propertyIsEnumerable)       \
     F(ignoreCase)                 \

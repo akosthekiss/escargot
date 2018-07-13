@@ -7135,7 +7135,8 @@ public:
 };
 
 
-RefPtr<ProgramNode> parseProgram(::Escargot::Context* ctx, StringView source, ParserASTNodeHandler handler, bool strictFromOutside, InterpretedCodeBlock* parentCodeBlock, size_t stackRemain) {
+RefPtr<ProgramNode> parseProgram(::Escargot::Context* ctx, StringView source, ParserASTNodeHandler handler, bool strictFromOutside, InterpretedCodeBlock* parentCodeBlock, size_t stackRemain)
+{
     Parser parser(ctx, source, handler, stackRemain);
     parser.context->strict = strictFromOutside;
     if (parentCodeBlock) {

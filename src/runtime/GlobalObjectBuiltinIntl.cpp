@@ -1254,7 +1254,7 @@ static Value builtinIntlCollatorConstructor(ExecutionState& state, Value thisVal
             // Let obj be the result of calling ToObject passing the this value as the argument.
             Object* obj = thisValue.toObject(state);
             // If the [[Extensible]] internal property of obj is false, throw a TypeError exception.
-            if (!obj->isExtensible()) {
+            if (!obj->isExtensible(state)) {
                 ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "This value of Intl.Collator function must be extensible");
             }
             initializeCollator(state, obj, locales, options);
@@ -1973,7 +1973,7 @@ static Value builtinIntlDateTimeFormatConstructor(ExecutionState& state, Value t
         // Let obj be the result of calling ToObject passing the this value as the argument.
         Object* obj = thisValue.toObject(state);
         // If the [[Extensible]] internal property of obj is false, throw a TypeError exception.
-        if (!obj->isExtensible()) {
+        if (!obj->isExtensible(state)) {
             ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "This value of Intl.DateTimeFormat function must be extensible");
         }
         // Call the InitializeDateTimeFormat abstract operation (defined in 12.1.1.1) with arguments obj, locales, and options.
@@ -2493,7 +2493,7 @@ static Value builtinIntlNumberFormatConstructor(ExecutionState& state, Value thi
             // Let obj be the result of calling ToObject passing the this value as the argument.
             Object* obj = thisValue.toObject(state);
             // If the [[Extensible]] internal property of obj is false, throw a TypeError exception.
-            if (!obj->isExtensible()) {
+            if (!obj->isExtensible(state)) {
                 ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "This value of Intl.NumberFormat function must be extensible");
             }
             initializeNumberFormat(state, obj, locales, options);

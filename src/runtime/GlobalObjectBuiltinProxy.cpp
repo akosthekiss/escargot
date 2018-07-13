@@ -75,7 +75,8 @@ static Value builtinProxyConstructor(ExecutionState& state, Value thisValue, siz
     }
 
     // 5. Let P be a newly created object.
-    ProxyObject* P = thisValue.toObject(state)->asProxyObject();
+    // TODO: 26.2.2.1 Implement revocable
+    ProxyObject* P = new ProxyObject(state);
 
     // 6. Set P.[[ProxyTarget]] to target.
     P->setTarget(argv[0].asObject());
@@ -91,22 +92,14 @@ void GlobalObject::installProxy(ExecutionState& state)
 {
     const StaticStrings* strings = &state.context()->staticStrings();
     m_proxy = new FunctionObject(state, NativeFunctionInfo(strings->Proxy, builtinProxyConstructor, 2, [](ExecutionState& state, CodeBlock* codeBlock, size_t argc, Value* argv) -> Object* {
-                                     return new ProxyObject(state);
+                                     return new Object(state);
                                  }),
                                  FunctionObject::__ForBuiltin__);
     m_proxy->markThisObjectDontNeedStructureTransitionTable(state);
     m_proxy->setPrototype(state, m_functionPrototype);
-    m_proxyPrototype = m_objectPrototype;
-    m_proxyPrototype = new ProxyObject(state);
-    m_proxyPrototype->markThisObjectDontNeedStructureTransitionTable(state);
-    m_proxyPrototype->setPrototype(state, m_objectPrototype);
-    m_proxyPrototype->defineOwnProperty(state, ObjectPropertyName(strings->constructor), ObjectPropertyDescriptor(m_proxy, (ObjectPropertyDescriptor::PresentAttribute)(ObjectPropertyDescriptor::WritablePresent | ObjectPropertyDescriptor::ConfigurablePresent)));
-
-    // TODO: 26.2.2.1 Implement revocable
 
     defineOwnProperty(state, ObjectPropertyName(strings->Proxy),
                       ObjectPropertyDescriptor(m_proxy, (ObjectPropertyDescriptor::PresentAttribute)(ObjectPropertyDescriptor::WritablePresent | ObjectPropertyDescriptor::ConfigurablePresent)));
 }
 }
-
 #endif // ESCARGOT_ENABLE_PROXY

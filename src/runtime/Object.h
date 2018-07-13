@@ -533,6 +533,11 @@ public:
         return true;
     }
 
+    virtual bool isOrdinary() const
+    {
+        return true;
+    }
+
     ErrorObject* asErrorObject()
     {
         ASSERT(isErrorObject());
@@ -578,8 +583,12 @@ public:
     }
 #endif
 
-    // http://www.ecma-international.org/ecma-262/6.0/index.html#sec-ordinary-object-internal-methods-and-internal-slots-isextensible
-    bool isExtensible()
+// http://www.ecma-international.org/ecma-262/6.0/index.html#sec-ordinary-object-internal-methods-and-internal-slots-isextensiblie
+#if ESCARGOT_ENABLE_PROXY
+    virtual bool isExtensible(ExecutionState&)
+#else
+    bool isExtensible(ExecutionState&)
+#endif
     {
         return rareData() == nullptr ? true : rareData()->m_isExtensible;
     }
@@ -644,7 +653,11 @@ public:
         }
     }
 
+#if ESCARGOT_ENABLE_PROXY
+    virtual void setPrototype(ExecutionState& state, const Value& value);
+#else
     void setPrototype(ExecutionState& state, const Value& value);
+#endif
 
     virtual ObjectGetResult getOwnProperty(ExecutionState& state, const ObjectPropertyName& P) ESCARGOT_OBJECT_SUBCLASS_MUST_REDEFINE;
     virtual bool defineOwnProperty(ExecutionState& state, const ObjectPropertyName& P, const ObjectPropertyDescriptor& desc) ESCARGOT_OBJECT_SUBCLASS_MUST_REDEFINE;

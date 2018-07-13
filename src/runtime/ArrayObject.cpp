@@ -266,7 +266,7 @@ void ArrayObject::convertIntoNonFastMode(ExecutionState& state)
 
 bool ArrayObject::setArrayLength(ExecutionState& state, const uint64_t& newLength)
 {
-    ASSERT(isExtensible() || newLength <= getArrayLength(state));
+    ASSERT(isExtensible(state) || newLength <= getArrayLength(state));
 
     if (UNLIKELY(isFastModeArray() && (newLength > ESCARGOT_ARRAY_NON_FASTMODE_MIN_SIZE))) {
         uint32_t orgLength = getArrayLength(state);
@@ -365,7 +365,7 @@ bool ArrayObject::setFastModeValue(ExecutionState& state, const ObjectPropertyNa
             }
 
             if (UNLIKELY(len <= idx)) {
-                if (UNLIKELY(!isExtensible())) {
+                if (UNLIKELY(!isExtensible(state))) {
                     return false;
                 }
                 if (UNLIKELY(!setArrayLength(state, idx + 1)) || UNLIKELY(!isFastModeArray())) {
@@ -403,7 +403,7 @@ bool ArrayObject::setIndexedProperty(ExecutionState& state, const Value& propert
         if (LIKELY(idx != Value::InvalidArrayIndexValue)) {
             uint32_t len = getArrayLength(state);
             if (UNLIKELY(len <= idx)) {
-                if (UNLIKELY(!isExtensible())) {
+                if (UNLIKELY(!isExtensible(state))) {
                     return false;
                 }
                 if (UNLIKELY(!setArrayLength(state, idx + 1)) || UNLIKELY(!isFastModeArray())) {

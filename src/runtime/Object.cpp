@@ -365,14 +365,17 @@ Object* Object::createFunctionPrototypeObject(ExecutionState& state, FunctionObj
 
 void Object::setPrototype(ExecutionState& state, const Value& value)
 {
-    if (!isExtensible() && (value.isObject() || value.isUndefinedOrNull())) {
+    if (!isExtensible(state) && (value.isObject() || value.isUndefinedOrNull())) {
         ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "can't set prototype of this object");
     }
 
     Value it = value;
     while (it.isObject()) {
-        if (it.isObject() && it.asObject() == this)
+        if (it.isObject() && it.asObject() == this) {
             ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "cyclic __proto__");
+        } else if (it.isObject() && it.asObject()->isOrdinary()) {
+            break;
+        }
         Value proto = it.asObject()->getPrototype(state);
         it = proto;
     }
@@ -449,7 +452,7 @@ bool Object::defineOwnProperty(ExecutionState& state, const ObjectPropertyName& 
     size_t oldIdx = m_structure->findProperty(state, propertyName);
     if (oldIdx == SIZE_MAX) {
         // 3. If current is undefined and extensible is false, then Reject.
-        if (UNLIKELY(!isExtensible()))
+        if (UNLIKELY(!isExtensible(state)))
             return false;
 
         auto structureBefore = m_structure;
@@ -698,17 +701,30 @@ ValueVector Object::getOwnPropertyKeys(ExecutionState& state)
 
 ObjectGetResult Object::get(ExecutionState& state, const ObjectPropertyName& propertyName)
 {
-    Object* target = this;
-    while (true) {
-        auto result = target->getOwnProperty(state, propertyName);
-        if (result.hasValue()) {
-            return result;
-        }
-        target = target->getPrototypeObject(state);
-        if (!target) {
+    Object* O = this;
+
+    // 1. Let desc be ? O.[[GetOwnProperty]](P).
+    auto desc = O->getOwnProperty(state, propertyName);
+
+    // 2. If desc is undefined, then
+    if (!desc.hasValue()) {
+        // a. Let parent be ? O.[[GetPrototypeOf]]().
+        Object* parent = O->getPrototypeObject(state);
+
+        // b. If parent is null, return undefined.
+        if (!parent) {
             return ObjectGetResult();
         }
+
+        // c. Return ? parent.[[Get]](P, Receiver).
+        return parent->get(state, propertyName);
     }
+
+    if (!desc.hasValue()) {
+        return ObjectGetResult();
+    }
+
+    return desc;
 }
 
 // http://www.ecma-international.org/ecma-262/6.0/#sec-ordinary-object-internal-methods-and-internal-slots-set-p-v-receiver
@@ -993,11 +1009,11 @@ bool Object::defineNativeDataAccessorProperty(ExecutionState& state, const Objec
 {
     if (hasOwnProperty(state, P))
         return false;
-    if (!isExtensible())
+    if (!isExtensible(state))
         return false;
 
     ASSERT(!hasOwnProperty(state, P));
-    ASSERT(isExtensible());
+    ASSERT(isExtensible(state));
 
     m_structure = m_structure->addProperty(state, P.toPropertyName(state), ObjectStructurePropertyDescriptor::createDataButHasNativeGetterSetterDescriptor(data));
     m_values.pushBack(objectInternalData, m_structure->propertyCount());

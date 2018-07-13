@@ -802,9 +802,9 @@ ValueVectorRef* ObjectRef::getOwnPropertyKeys(ExecutionStateRef* state)
     return result;
 }
 
-bool ObjectRef::isExtensible()
+bool ObjectRef::isExtensible(ExecutionStateRef* state)
 {
-    return toImpl(this)->isExtensible();
+    return toImpl(this)->isExtensible(*toImpl(state));
 }
 
 void ObjectRef::preventExtensions()

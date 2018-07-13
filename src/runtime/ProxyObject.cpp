@@ -34,6 +34,134 @@ ProxyObject::ProxyObject(ExecutionState& state)
 {
 }
 
+bool ProxyObject::isExtensible(ExecutionState& state)
+{
+    auto strings = &state.context()->staticStrings();
+
+    // 1. If handler is null, throw a TypeError exception.
+    if (this->handler() == nullptr) {
+        ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy handler can be null.");
+        return false;
+    }
+
+    // 2. Let handler be O.[[ProxyHandler]].
+    Value handler(this->handler());
+
+    // 3. Assert: Type(handler) is Object.
+    ASSERT(handler.isObject());
+
+    // 4. Let target be O.[[ProxyTarget]].
+    Value target(this->target());
+
+    // 5. Let trap be ? GetMethod(handler, "isExtensible").
+    ObjectPropertyName name = ObjectPropertyName(state, strings->isExtensible.string());
+    ObjectGetResult trapResult = handler.asObject()->get(state, name);
+
+    if (trapResult.hasValue()) {
+        Value trap = trapResult.value(state, handler);
+        // 6. If trap is undefined, then Return ? target.[[IsExtensible]]().
+        if (trap.isUndefined()) {
+            return target.asObject()->isExtensible(state);
+        }
+        if (trap.isFunction()) {
+            // 7. Let booleanTrapResult be ToBoolean(? Call(trap, handler, « target »)).
+            Value arguments[] = { target };
+            Value booleanTrapResult = FunctionObject::call(state, trap, handler, 1, arguments);
+            bool trapResult = true;
+            if (booleanTrapResult.isFalse() || booleanTrapResult.isUndefinedOrNull()) {
+                trapResult = false;
+            }
+
+            // 8. Let targetResult be ? target.[[IsExtensible]]().
+            bool targetResult = target.asObject()->isExtensible(state);
+
+            // 9. If SameValue(booleanTrapResult, targetResult) is false, throw a TypeError exception.
+            if (trapResult != targetResult) {
+                ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy Type Error");
+                return false;
+            }
+
+            // 10. Return booleanTrapResult.
+            return trapResult;
+        } else {
+            ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy handler's getPrototypeOf trap wasn't undefined, null, or callable");
+            return false;
+        }
+    } else {
+        return target.asObject()->isExtensible(state);
+    }
+
+    return false;
+}
+
+// https://www.ecma-international.org/ecma-262/8.0/#sec-proxy-object-internal-methods-and-internal-slots-setprototypeof-v
+void ProxyObject::setPrototype(ExecutionState& state, const Value& value)
+{
+    auto strings = &state.context()->staticStrings();
+
+    // 1. Assert: Either Type(V) is Object or Type(V) is Null.
+    ASSERT(value.isObject() || value.isNull());
+
+    // 2. If handler is null, throw a TypeError exception.
+    if (this->handler() == nullptr) {
+        ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy handler can be null.");
+        return;
+    }
+
+    // 3. Let handler be O.[[ProxyHandler]].
+    Value handler(this->handler());
+
+    // 4. Assert: Type(handler) is Object.
+    ASSERT(handler.isObject());
+
+    // 5. Let target be O.[[ProxyTarget]].
+    Value target(this->target());
+
+    // 6. Let trap be ? GetMethod(handler, "setPrototypeOf").
+    ObjectPropertyName name = ObjectPropertyName(state, strings->setPrototypeOf.string());
+    ObjectGetResult trapResult = handler.asObject()->get(state, name);
+
+    if (trapResult.hasValue()) {
+        Value trap = trapResult.value(state, handler);
+        // 7. If trap is undefined, then Return ? target.[[SetPrototypeOf]](V).
+        if (trap.isUndefined()) {
+            target.asObject()->setPrototype(state, value);
+        }
+
+        // 8. Let booleanTrapResult be ToBoolean(? Call(trap, handler, « target, V »)).
+        Value arguments[] = { target, value };
+        Value booleanTrapResult = FunctionObject::call(state, trap, handler, 2, arguments);
+
+        // 9. If booleanTrapResult is false, throw a TypeError exception.
+        if (booleanTrapResult.isFalse() || booleanTrapResult.isUndefinedOrNull()) {
+            ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy Type Error : trap returned false");
+            return;
+        }
+
+        // 10. Let extensibleTarget be ? IsExtensible(target).
+        bool extensibleTarget = target.asObject()->isExtensible(state);
+
+        // 11. If extensibleTarget is true, return true.
+        if (extensibleTarget) {
+            return;
+        }
+
+        // 12. Let targetProto be ? target.[[GetPrototypeOf]]().
+        Value targetProto = target.asObject()->getPrototype(state);
+
+        // 13. If SameValue(V, targetProto) is false, throw a TypeError exception.
+        if (value != targetProto) {
+            ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy Type Error");
+            return;
+        }
+
+        // 14. Return true.
+        return;
+    }
+
+    target.asObject()->setPrototype(state, value);
+}
+
 Object* ProxyObject::getPrototypeObject(ExecutionState& state)
 {
     if (!this->target()) {
@@ -52,14 +180,15 @@ Object* ProxyObject::getPrototypeObject(ExecutionState& state)
 Value ProxyObject::getPrototype(ExecutionState& state)
 {
     auto strings = &state.context()->staticStrings();
-    // 1. Let handler be O.[[ProxyHandler]].
-    Value handler(this->handler());
 
-    // 2. If handler is null, throw a TypeError exception.
+    // 1. If handler is null, throw a TypeError exception.
     if (this->handler() == nullptr) {
         ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy handler can be null.");
         return Value();
     }
+
+    // 2. Let handler be O.[[ProxyHandler]].
+    Value handler(this->handler());
 
     // 3. Assert: Type(handler) is Object.
     ASSERT(handler.isObject());
@@ -88,7 +217,7 @@ Value ProxyObject::getPrototype(ExecutionState& state)
                 return Value();
             }
             // 9. Let extensibleTarget be ? IsExtensible(target).
-            bool extensibleTarget = target.asObject()->isExtensible();
+            bool extensibleTarget = target.asObject()->isExtensible(state);
             // 10. If extensibleTarget is true, return handlerProto.
             if (extensibleTarget) {
                 return handlerProto;
@@ -120,14 +249,14 @@ ObjectGetResult ProxyObject::get(ExecutionState& state, const ObjectPropertyName
 {
     auto strings = &state.context()->staticStrings();
 
-    // 1. Let handler be O.[[ProxyHandler]].
-    Value handler(this->handler());
-
-    // 2. If handler is null, throw a TypeError exception.
+    // 1. If handler is null, throw a TypeError exception.
     if (this->handler() == nullptr) {
         ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy handler can be null.");
         return ObjectGetResult();
     }
+
+    // 2. Let handler be O.[[ProxyHandler]].
+    Value handler(this->handler());
 
     // 3. Let target be O.[[ProxyTarget]].
     Value target(this->target());
@@ -191,14 +320,14 @@ bool ProxyObject::set(ExecutionState& state, const ObjectPropertyName& propertyN
 {
     auto strings = &state.context()->staticStrings();
 
-    // 1. Let handler be O.[[ProxyHandler]].
-    Value handler(this->handler());
-
-    // 2. If handler is null, throw a TypeError exception.
+    // 1. If handler is null, throw a TypeError exception.
     if (this->handler() == nullptr) {
         ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: Proxy Type Error.");
         return false;
     }
+
+    // 2. Let handler be O.[[ProxyHandler]].
+    Value handler(this->handler());
 
     // 3. Let target be O.[[ProxyTarget]].
     Value target(this->target());
@@ -221,7 +350,7 @@ bool ProxyObject::set(ExecutionState& state, const ObjectPropertyName& propertyN
                 Value arguments[] = { target, prop, v, receiver };
                 Value booleanTrapResult = FunctionObject::call(state, trap, handler, 4, arguments);
                 // 7. If booleanTrapResult is false, return false.
-                if (booleanTrapResult.isFalse()) {
+                if (booleanTrapResult.isFalse() || booleanTrapResult.isUndefinedOrNull()) {
                     return false;
                 }
             } else {

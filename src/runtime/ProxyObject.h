@@ -35,6 +35,11 @@ public:
         return true;
     }
 
+    virtual bool isOrdinary() const
+    {
+        return false;
+    }
+
     // http://www.ecma-international.org/ecma-262/5.1/#sec-8.6.2
     virtual const char* internalClassProperty()
     {
@@ -51,8 +56,12 @@ public:
         return false;
     }
 
+    void setPrototype(ExecutionState& state, const Value& value) override;
+
     Value getPrototype(ExecutionState&) override;
     Object* getPrototypeObject(ExecutionState&) override;
+
+    bool isExtensible(ExecutionState&) override;
 
     void setTarget(Object* target)
     {
