@@ -2495,6 +2495,7 @@ struct Context : public gc {
     bool isStatic : 1;
     bool isConstructor : 1;
     bool isMethodProperty : 1;
+    bool allowSuperCall : 1;
     RefPtr<ScannerResult> firstCoverInitializedNameError;
     std::vector<std::pair<AtomicString, size_t>> labelSet; // <LabelString, with statement count>
     std::vector<FunctionDeclarationNode*> functionDeclarationsInDirectCatchScope;
@@ -2693,6 +2694,7 @@ public:
         this->context->isStatic = false;
         this->context->isConstructor = true;
         this->context->isMethodProperty = false;
+        this->context->allowSuperCall = true;
 
         this->baseMarker.index = startIndex;
         this->baseMarker.lineNumber = this->scanner->lineNumber;
@@ -4288,11 +4290,15 @@ public:
         RefPtr<SuperNode> super;
         if (this->matchKeyword(Super) && this->context->isMethodProperty) {
             MetaNode node = this->createNode();
-            this->nextToken();
+            RefPtr<ScannerResult> superToken = this->nextToken();
             expr = this->finalize(node, new SuperNode(this->match(LeftParenthesis) ? SuperNode::Kind::Constructor : SuperNode::Kind::Undefined, this->context->isStatic));
             super = static_cast<SuperNode*>(expr.get());
-            if ((!this->match(LeftParenthesis) && !this->match(Period) && !this->match(LeftSquareBracket)) || (this->match(LeftParenthesis) && !this->context->isConstructor && !this->context->isMethodProperty)) {
+            if ((!this->match(LeftParenthesis) && !this->match(Period) && !this->match(LeftSquareBracket))) {
                 this->throwUnexpectedToken(this->lookahead);
+            }
+
+            if (this->match(LeftParenthesis) && (!this->context->isConstructor || !this->context->allowSuperCall)) {
+                this->throwUnexpectedToken(superToken);
             }
         } else {
             expr = this->inheritCoverGrammar(this->matchKeyword(New) ? &Parser::parseNewExpression : &Parser::parsePrimaryExpression);
@@ -6851,9 +6857,12 @@ public:
             this->nextToken();
             superClass = this->isolateCoverGrammar(&Parser::parseLeftHandSideExpressionAllowCall);
         }
+        const bool previousAllowSuperCall = this->context->allowSuperCall;
+        this->context->allowSuperCall = superClass ? true : false;
 
         RefPtr<ClassBodyNode> classBody = this->parseClassBody();
         this->context->strict = previousStrict;
+        this->context->allowSuperCall = previousAllowSuperCall;
 
         return this->finalize(node, new ClassDeclarationNode(id.get(), superClass.get(), classBody.get()));
     }
@@ -6877,8 +6886,12 @@ public:
             this->nextToken();
             superClass = this->isolateCoverGrammar(&Parser::parseLeftHandSideExpressionAllowCall);
         }
+
+        const bool previousAllowSuperCall = this->context->allowSuperCall;
+        this->context->allowSuperCall = superClass ? true : false;
         RefPtr<ClassBodyNode> classBody = this->parseClassBody();
         this->context->strict = previousStrict;
+        this->context->allowSuperCall = previousAllowSuperCall;
 
         return this->finalize(node, new ClassExpressionNode(id.get(), superClass.get(), classBody.get()));
     }
