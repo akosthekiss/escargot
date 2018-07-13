@@ -6646,8 +6646,10 @@ public:
         bool isGenerator = false;
         bool previousAllowYield = this->context->allowYield;
         bool previousIsMethodProperty = this->context->isMethodProperty;
+        bool previousIsConstructor = this->context->isConstructor;
         this->context->allowYield = false;
         this->context->isMethodProperty = true;
+        this->context->isConstructor = false;
 
         this->expect(LeftParenthesis);
         if (this->match(RightParenthesis)) {
@@ -6661,6 +6663,7 @@ public:
         RefPtr<Node> method = this->parsePropertyMethod(options2, AtomicString());
         this->context->allowYield = previousAllowYield;
         this->context->isMethodProperty = previousIsMethodProperty;
+        this->context->isConstructor = previousIsConstructor;
 
         extractNamesFromFunctionParams(options.params);
         return this->finalize(node, new FunctionExpressionNode(AtomicString(), std::move(options.params), method.get(), popScopeContext(node), isGenerator));
