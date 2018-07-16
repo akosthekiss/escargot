@@ -593,10 +593,15 @@ public:
         return rareData() == nullptr ? true : rareData()->m_isExtensible;
     }
 
-    // http://www.ecma-international.org/ecma-262/6.0/index.html#sec-ordinary-object-internal-methods-and-internal-slots-preventextensions
-    void preventExtensions()
+// http://www.ecma-international.org/ecma-262/6.0/index.html#sec-ordinary-object-internal-methods-and-internal-slots-preventextensions
+#if ESCARGOT_ENABLE_PROXY
+    virtual bool preventExtensions(ExecutionState&)
+#else
+    bool preventExtensions(ExecutionState&)
+#endif
     {
         ensureObjectRareData()->m_isExtensible = false;
+        return true;
     }
 
 #if ESCARGOT_ENABLE_PROXY
@@ -672,7 +677,11 @@ public:
         return getOwnProperty(state, propertyName).hasValue();
     }
 
+#if ESCARGOT_ENABLE_PROXY
+    virtual bool hasProperty(ExecutionState& state, const ObjectPropertyName& propertyName)
+#else
     bool hasProperty(ExecutionState& state, const ObjectPropertyName& propertyName)
+#endif
     {
         return get(state, propertyName).hasValue();
     }

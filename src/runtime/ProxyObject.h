@@ -46,6 +46,10 @@ public:
         return "Proxy";
     }
 
+    bool preventExtensions(ExecutionState& state) override;
+
+    bool hasProperty(ExecutionState& state, const ObjectPropertyName& propertyName) override;
+
     ObjectGetResult get(ExecutionState& state, const ObjectPropertyName& propertyName) override;
     bool set(ExecutionState& state, const ObjectPropertyName& propertyName, const Value& v, const Value& receiver) override;
 

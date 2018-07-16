@@ -60,7 +60,7 @@ static Value builtinObjectPreventExtensions(ExecutionState& state, Value thisVal
         ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, state.context()->staticStrings().Object.string(), false, state.context()->staticStrings().defineProperty.string(), errorMessage_GlobalObject_FirstArgumentNotObject);
     }
     Object* o = argv[0].asObject();
-    o->preventExtensions();
+    o->preventExtensions(state);
     return o;
 }
 
@@ -315,7 +315,7 @@ static Value builtinObjectFreeze(ExecutionState& state, Value thisValue, size_t 
     }
 
     // Set the [[Extensible]] internal property of O to false.
-    O->preventExtensions();
+    O->preventExtensions(state);
     // Return O.
     return O;
 }
@@ -550,7 +550,7 @@ static Value builtinObjectSeal(ExecutionState& state, Value thisValue, size_t ar
     }
 
     // Set the [[Extensible]] internal property of O to false.
-    O->preventExtensions();
+    O->preventExtensions(state);
     // Return O.
     return O;
 }

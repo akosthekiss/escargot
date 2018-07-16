@@ -235,7 +235,7 @@ bool ArgumentsObject::defineOwnProperty(ExecutionState& state, const ObjectPrope
                     }
                     bool ret = Object::defineOwnProperty(state, P, newDesc);
                     if (!extensibleBefore) {
-                        preventExtensions();
+                        preventExtensions(state);
                     }
                     return ret;
                 }

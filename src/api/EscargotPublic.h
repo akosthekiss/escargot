@@ -457,7 +457,7 @@ public:
     void enumerateObjectOwnProperies(ExecutionStateRef* state, const std::function<bool(ExecutionStateRef* state, ValueRef* propertyName, bool isWritable, bool isEnumerable, bool isConfigurable)>& cb);
 
     bool isExtensible(ExecutionStateRef* state);
-    void preventExtensions();
+    void preventExtensions(ExecutionStateRef* state);
 
     void* extraData();
     void setExtraData(void* e);

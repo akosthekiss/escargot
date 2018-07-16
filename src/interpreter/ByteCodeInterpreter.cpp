@@ -824,7 +824,7 @@ Value ByteCodeInterpreter::interpret(ExecutionState& state, ByteCodeBlock* byteC
                 const Value& property = registerFile[code->m_propertyRegisterIndex];
                 Object* obj = willBeObject.toObject(state);
                 if (willBeObject.isPrimitive()) {
-                    obj->preventExtensions();
+                    obj->preventExtensions(state);
                 }
 
                 bool result = obj->setIndexedProperty(state, property, registerFile[code->m_loadRegisterIndex]);
@@ -1508,7 +1508,7 @@ ALWAYS_INLINE void ByteCodeInterpreter::setObjectPreComputedCaseOperation(Execut
     if (UNLIKELY(!willBeObject.isObject())) {
         obj = willBeObject.toObject(state);
         if (willBeObject.isPrimitive()) {
-            obj->preventExtensions();
+            obj->preventExtensions(state);
         }
     } else {
         obj = willBeObject.asObject();
