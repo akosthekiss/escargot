@@ -5698,20 +5698,16 @@ public:
                     right = this->parseExpression();
                     init = nullptr;
                 } else if (this->lookahead->type == Token::IdentifierToken && this->lookahead->relatedSource() == "of") {
-                    this->throwError("for of is not supported yet");
-                    RELEASE_ASSERT_NOT_REACHED();
-                    /*
-                    if (!this->context->isAssignmentTarget || init.type === Syntax.AssignmentExpression) {
-                        this->tolerateError(Messages.InvalidLHSInForLoop);
+                    if (!this->context->isAssignmentTarget || init->type() == ASTNodeType::AssignmentExpression) {
+                        this->tolerateError(Messages::InvalidLHSInForLoop);
                     }
 
                     this->nextToken();
-                    this->reinterpretExpressionAsPattern(init);
+                    this->reinterpretExpressionAsPattern(init.get());
                     left = init;
                     right = this->parseAssignmentExpression();
-                    init = null;
+                    init = nullptr;
                     forIn = false;
-                    */
                 } else {
                     if (this->match(Comma)) {
                         ExpressionNodeVector initSeq;
@@ -5760,18 +5756,9 @@ public:
             if (forIn) {
                 return this->finalize(node, new ForInStatementNode(left.get(), right.get(), body.get(), false));
             } else {
-                this->throwError("For of is not supported yet");
-                RELEASE_ASSERT_NOT_REACHED();
-                // return this->finalize(node, new Node.ForOfStatement(left, right, body));
+                return this->finalize(node, new ForOfStatementNode(left.get(), right.get(), body.get()));
             }
         }
-        /*
-        return (typeof left === 'undefined') ?
-            this->finalize(node, new Node.ForStatement(init, test, update, body)) :
-            forIn ? this->finalize(node, new Node.ForInStatement(left, right, body)) :
-                this->finalize(node, new Node.ForOfStatement(left, right, body));
-
-*/
     }
 
     void removeLabel(AtomicString label)

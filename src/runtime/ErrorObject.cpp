@@ -85,6 +85,7 @@ const char* errorMessage_GlobalObject_CalledOnIncompatibleReceiver = "%s: called
 const char* errorMessage_GlobalObject_IllegalFirstArgument = "%s: illegal first argument";
 const char* errorMessage_String_InvalidStringLength = "Invalid string length";
 const char* errorMessage_Class_NotCallable = "Class constructor cannot be invoked without 'new'";
+const char* errorMessage_NotIterable = "Not iterable";
 
 
 void ErrorObject::throwBuiltinError(ExecutionState& state, Code code, String* objectName, bool prototoype, String* functionName, const char* templateString)

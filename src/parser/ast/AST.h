@@ -75,6 +75,7 @@
 #include "ExpressionNode.h"
 #include "ExpressionStatementNode.h"
 #include "ForInStatementNode.h"
+#include "ForOfStatementNode.h"
 #include "ForStatementNode.h"
 #include "FunctionDeclarationNode.h"
 #include "FunctionExpressionNode.h"

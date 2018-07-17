@@ -50,6 +50,7 @@ enum ASTNodeType {
     IfStatement,
     ForStatement,
     ForInStatement,
+    ForOfStatement,
     WhileStatement,
     DoWhileStatement,
     SpreadElement,
