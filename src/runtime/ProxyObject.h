@@ -23,6 +23,7 @@
 #define __EscargotProxyObject__
 
 #include "runtime/Object.h"
+#include "runtime/FunctionObject.h"
 
 namespace Escargot {
 
@@ -45,6 +46,12 @@ public:
     {
         return "Proxy";
     }
+
+    bool defineOwnProperty(ExecutionState& state, const ObjectPropertyName& P, const ObjectPropertyDescriptor& desc) override;
+
+    bool deleteOwnProperty(ExecutionState& state, const ObjectPropertyName& P) override;
+
+    ObjectGetResult getOwnProperty(ExecutionState& state, const ObjectPropertyName& P) override;
 
     bool preventExtensions(ExecutionState& state) override;
 
@@ -90,6 +97,33 @@ public:
 protected:
     Object* m_target;
     Object* m_handler;
+};
+
+class RevocableFunctionObject : public FunctionObject {
+public:
+    RevocableFunctionObject(ExecutionState& state, NativeFunctionInfo info, ProxyObject* revocable)
+        : FunctionObject(state, info)
+    {
+        m_revocable = revocable;
+    }
+
+    ProxyObject* revocable()
+    {
+        return m_revocable;
+    }
+
+    void setRevocable(ProxyObject* o)
+    {
+        m_revocable = o;
+    }
+
+    virtual bool isRevocableFunctionObject() const
+    {
+        return true;
+    }
+
+protected:
+    ProxyObject* m_revocable;
 };
 }
 

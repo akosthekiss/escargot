@@ -75,7 +75,6 @@ static Value builtinProxyConstructor(ExecutionState& state, Value thisValue, siz
     }
 
     // 5. Let P be a newly created object.
-    // TODO: 26.2.2.1 Implement revocable
     ProxyObject* P = new ProxyObject(state);
 
     // 6. Set P.[[ProxyTarget]] to target.
@@ -88,6 +87,64 @@ static Value builtinProxyConstructor(ExecutionState& state, Value thisValue, siz
     return P;
 }
 
+// https://www.ecma-international.org/ecma-262/8.0/index.html#sec-proxy-revocation-functions
+static Value builtinProxyRevoke(ExecutionState& state, Value thisValue, size_t argc, Value* argv, bool isNewExpression)
+{
+    const StaticStrings* strings = &state.context()->staticStrings();
+    if (isNewExpression) {
+        ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: calling a builtin Proxy constructor with new is forbidden");
+        return Value();
+    }
+
+    RevocableFunctionObject* F = (RevocableFunctionObject*)state.executionContext()->resolveCallee();
+
+    // 1. Let p be F.[[RevocableProxy]].
+    ProxyObject* p = F->revocable();
+
+    // 2. If p is null, return undefined.
+    if (p == nullptr) {
+        return Value();
+    }
+
+    // 3. Set F.[[RevocableProxy]] to null.
+    F->setRevocable(nullptr);
+
+    // 4. Set p.[[ProxyTarget]] to null.
+    p->setTarget(nullptr);
+
+    // 5. Set p.[[ProxyHandler]] to null.
+    p->setHandler(nullptr);
+
+    // 6. Return undefined.
+    return Value();
+}
+
+// https://www.ecma-international.org/ecma-262/8.0/index.html#sec-proxy.revocable
+static Value builtinProxyRevocable(ExecutionState& state, Value thisValue, size_t argc, Value* argv, bool isNewExpression)
+{
+    const StaticStrings* strings = &state.context()->staticStrings();
+    if (isNewExpression) {
+        ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, strings->Proxy.string(), false, String::emptyString, "%s: calling a builtin Proxy constructor with new is forbidden");
+        return Value();
+    }
+    // 1. Let p be ? ProxyCreate(target, handler).
+    Value p = builtinProxyConstructor(state, thisValue, argc, argv, true);
+
+    // 2. Let result be ObjectCreate(%ObjectPrototype%).
+    Object* result = new Object(state);
+    result->setPrototype(state, state.context()->globalObject()->objectPrototype());
+    // 3. Perform CreateDataProperty(result, "proxy", p).
+    result->defineOwnPropertyThrowsException(state, ObjectPropertyName(strings->proxy),
+                                             ObjectPropertyDescriptor(p, (ObjectPropertyDescriptor::PresentAttribute)(ObjectPropertyDescriptor::WritablePresent | ObjectPropertyDescriptor::ConfigurablePresent)));
+    ProxyObject* P = p.asObject()->asProxyObject();
+    // 4. Perform CreateDataProperty(result, "revoke", revoker).
+    result->defineOwnPropertyThrowsException(state, ObjectPropertyName(strings->revoke),
+                                             ObjectPropertyDescriptor(new RevocableFunctionObject(state, NativeFunctionInfo(strings->revoke, builtinProxyRevoke, 0, nullptr, NativeFunctionInfo::Strict), P),
+                                                                      (ObjectPropertyDescriptor::PresentAttribute)(ObjectPropertyDescriptor::WritablePresent | ObjectPropertyDescriptor::ConfigurablePresent)));
+
+    return result;
+}
+
 void GlobalObject::installProxy(ExecutionState& state)
 {
     const StaticStrings* strings = &state.context()->staticStrings();
@@ -97,6 +154,10 @@ void GlobalObject::installProxy(ExecutionState& state)
                                  FunctionObject::__ForBuiltin__);
     m_proxy->markThisObjectDontNeedStructureTransitionTable(state);
     m_proxy->setPrototype(state, m_functionPrototype);
+    // 26.2.2.1 Implement revocable
+    m_proxy->defineOwnPropertyThrowsException(state, ObjectPropertyName(strings->revocable),
+                                              ObjectPropertyDescriptor(new FunctionObject(state, NativeFunctionInfo(strings->revocable, builtinProxyRevocable, 2, nullptr, NativeFunctionInfo::Strict)),
+                                                                       (ObjectPropertyDescriptor::PresentAttribute)(ObjectPropertyDescriptor::WritablePresent | ObjectPropertyDescriptor::ConfigurablePresent)));
 
     defineOwnProperty(state, ObjectPropertyName(strings->Proxy),
                       ObjectPropertyDescriptor(m_proxy, (ObjectPropertyDescriptor::PresentAttribute)(ObjectPropertyDescriptor::WritablePresent | ObjectPropertyDescriptor::ConfigurablePresent)));

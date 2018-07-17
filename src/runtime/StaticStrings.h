@@ -243,6 +243,7 @@ namespace Escargot {
     F(getOwnPropertyNames)        \
     F(getOwnPropertySymbols)      \
     F(hasOwnProperty)             \
+    F(deleteProperty)             \
     F(imul)                       \
     F(isExtensible)               \
     F(isFinite)                   \
@@ -320,6 +321,9 @@ namespace Escargot {
     F(setUint32)                  \
     F(Promise)                    \
     F(Proxy)                      \
+    F(proxy)                      \
+    F(revoke)                     \
+    F(revocable)                  \
     F(alreadyResolved)            \
     F(alreadyCalled)              \
     F(values)                     \
