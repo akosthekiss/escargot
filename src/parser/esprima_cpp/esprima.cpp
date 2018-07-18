@@ -2570,7 +2570,7 @@ public:
         return ret;
     }
 
-    void extractNamesFromFunctionParams(const PatternNodeVector& vector)
+    void extractFunctionParameterInfos(const PatternNodeVector& vector, const MetaNode& paramStart)
     {
         if (this->config.parseSingleFunction)
             return;
@@ -2581,9 +2581,17 @@ public:
             } else if (vector[i]->type() == RestElement) {
                 IdentifierNode* id = ((RestElementNode*)vector[i].get())->argument();
                 scopeContexts.back()->insertName(id->name(), true);
+                scopeContexts.back()->m_isSimpleParameterList = false;
             } else {
+                scopeContexts.back()->m_isSimpleParameterList = false;
                 ASSERT_NOT_REACHED();
             }
+        }
+
+        if (!scopeContexts.back()->m_isSimpleParameterList) {
+            scopeContexts.back()->m_locParamStart.line = paramStart.line;
+            scopeContexts.back()->m_locParamStart.column = paramStart.column;
+            scopeContexts.back()->m_locParamStart.index = paramStart.index;
         }
     }
 
@@ -3496,7 +3504,7 @@ public:
             this->params = std::move(params);
             this->stricted = stricted;
             this->firstRestricted = firstRestricted;
-            this->message = nullptr;
+            this->message = message;
             this->valid = true;
         }
     };
@@ -3566,7 +3574,7 @@ public:
 
     // ECMA-262 12.2.6 Object Initializer
 
-    RefPtr<Node> parsePropertyMethod(ParseFormalParametersResult& params, const AtomicString& functionName)
+    RefPtr<Node> parsePropertyMethod(ParseFormalParametersResult& params)
     {
         bool previousInArrowFunction = this->context->inArrowFunction;
 
@@ -3574,8 +3582,6 @@ public:
         this->context->isAssignmentTarget = false;
         this->context->isBindingElement = false;
 
-        pushScopeContext(params.params, functionName);
-        extractNamesFromFunctionParams(params.params);
         const bool previousStrict = this->context->strict;
         RefPtr<Node> body = this->isolateCoverGrammar(&Parser::parseFunctionSourceElements);
         if (this->context->strict && params.firstRestricted) {
@@ -3595,10 +3601,15 @@ public:
         const bool isGenerator = false;
         const bool previousAllowYield = this->context->allowYield;
         this->context->allowYield = false;
+        MetaNode paramStart = this->createNode();
         this->expect(LeftParenthesis);
         MetaNode node = this->createNode();
         ParseFormalParametersResult params = this->parseFormalParameters();
-        RefPtr<Node> method = this->parsePropertyMethod(params, functionName);
+
+        pushScopeContext(params.params, functionName);
+        extractFunctionParameterInfos(params.params, paramStart);
+
+        RefPtr<Node> method = this->parsePropertyMethod(params);
         this->context->allowYield = previousAllowYield;
 
         return this->finalize(node, new FunctionExpressionNode(functionName, std::move(params.params), method.get(), popScopeContext(node), isGenerator));
@@ -4996,19 +5007,20 @@ public:
                     }
                     this->context->firstCoverInitializedNameError = nullptr;
 
-                    pushScopeContext(list.params, AtomicString());
+                    this->expect(Arrow);
 
-                    extractNamesFromFunctionParams(list.params);
+                    MetaNode node = this->startNode(startToken);
+                    MetaNode nodeStart = this->createNode();
+
+                    pushScopeContext(list.params, AtomicString());
+                    extractFunctionParameterInfos(list.params, node);
+
                     bool previousStrict = this->context->strict;
                     bool previousAllowYield = this->context->allowYield;
                     bool previousInArrowFunction = this->context->inArrowFunction;
                     this->context->allowYield = true;
                     this->context->inArrowFunction = true;
 
-                    MetaNode node = this->startNode(startToken);
-                    MetaNode nodeStart = this->createNode();
-
-                    this->expect(Arrow);
                     RefPtr<Node> body = this->match(LeftBrace) ? this->parseFunctionSourceElements() : this->isolateCoverGrammar(&Parser::parseAssignmentExpression);
                     bool expression = body->type() != BlockStatement;
                     if (expression) {
@@ -6209,60 +6221,70 @@ public:
         return statement;
     }
 
-    RefPtr<Node> parseArrowFunctionSourceElements()
+    RefPtr<Node> parseSingleFunctionSource(bool isSimpleParameterList)
+    {
+        if (!isSimpleParameterList) {
+            this->expect(LeftParenthesis);
+            ParseFormalParametersResult formalParameters = this->parseFormalParameters();
+        }
+
+        RefPtr<Node> bodyBlock = parseFunctionSourceElements();
+        return bodyBlock;
+    }
+
+    RefPtr<Node> parseSingleArrowFunctionSource(bool isSimpleParameterList)
     {
         ASSERT(this->config.parseSingleFunction);
-
         this->context->inArrowFunction = true;
+
+        if (!isSimpleParameterList) {
+            RefPtr<Node> expr = this->parseConditionalExpression();
+            ASSERT(expr->type() == ArrowParameterPlaceHolder || this->match(Arrow));
+            ParseFormalParametersResult list = this->reinterpretAsCoverFormalsList(expr.get());
+            this->expect(Arrow);
+        }
+
+        RefPtr<Node> bodyBlock;
         if (this->match(LeftBrace)) {
-            return parseFunctionSourceElements();
+            bodyBlock = parseFunctionSourceElements();
+        } else {
+            bool prevInDirectCatchScope = this->context->inDirectCatchScope;
+            this->context->inDirectCatchScope = false;
+
+            auto previousLabelSet = this->context->labelSet;
+            bool previousInIteration = this->context->inIteration;
+            bool previousInSwitch = this->context->inSwitch;
+            bool previousInFunctionBody = this->context->inFunctionBody;
+
+            this->context->labelSet.clear();
+            this->context->inIteration = false;
+            this->context->inSwitch = false;
+            this->context->inFunctionBody = true;
+
+            bool previousStrict = this->context->strict;
+            bool previousAllowYield = this->context->allowYield;
+            this->context->allowYield = true;
+
+            MetaNode nodeStart = this->createNode();
+
+            RefPtr<Node> expr = this->isolateCoverGrammar(&Parser::parseAssignmentExpression);
+
+            RefPtr<StatementContainer> body = StatementContainer::create();
+            body->appendChild(this->finalize(nodeStart, new ReturnStatmentNode(expr.get())), nullptr);
+
+            this->context->strict = previousStrict;
+            this->context->allowYield = previousAllowYield;
+
+            this->context->labelSet = previousLabelSet;
+            this->context->inIteration = previousInIteration;
+            this->context->inSwitch = previousInSwitch;
+            this->context->inFunctionBody = previousInFunctionBody;
+
+            this->context->inDirectCatchScope = prevInDirectCatchScope;
+            bodyBlock = this->finalize(nodeStart, new BlockStatementNode(body.get()));
         }
 
-        bool prevInDirectCatchScope = this->context->inDirectCatchScope;
-        this->context->inDirectCatchScope = false;
-
-        auto previousLabelSet = this->context->labelSet;
-        bool previousInIteration = this->context->inIteration;
-        bool previousInSwitch = this->context->inSwitch;
-        bool previousInFunctionBody = this->context->inFunctionBody;
-
-        this->context->labelSet.clear();
-        this->context->inIteration = false;
-        this->context->inSwitch = false;
-        this->context->inFunctionBody = true;
-
-        bool previousStrict = this->context->strict;
-        bool previousAllowYield = this->context->allowYield;
-        this->context->allowYield = true;
-
-        this->expect(Arrow);
-        MetaNode nodeStart = this->createNode();
-
-        RefPtr<Node> expr = this->isolateCoverGrammar(&Parser::parseAssignmentExpression);
-
-        RefPtr<StatementContainer> body = StatementContainer::create();
-        body->appendChild(this->finalize(nodeStart, new ReturnStatmentNode(expr.get())), nullptr);
-
-        /*
-        if (this->context->strict && list.firstRestricted) {
-            this->throwUnexpectedToken(list.firstRestricted, list.message);
-        }
-        if (this->context->strict && list.stricted) {
-            this->tolerateUnexpectedToken(list.stricted, list.message);
-        }
-        */
-
-        this->context->strict = previousStrict;
-        this->context->allowYield = previousAllowYield;
-
-        this->context->labelSet = previousLabelSet;
-        this->context->inIteration = previousInIteration;
-        this->context->inSwitch = previousInSwitch;
-        this->context->inFunctionBody = previousInFunctionBody;
-
-        this->context->inDirectCatchScope = prevInDirectCatchScope;
-
-        return this->finalize(nodeStart, new BlockStatementNode(body.get()));
+        return bodyBlock;
     }
 
     RefPtr<Node> parseDefaultConstructor()
@@ -6420,6 +6442,7 @@ public:
         this->context->isConstructor = true;
         this->context->isMethodProperty = false;
 
+        MetaNode paramStart = this->createNode();
         this->expect(LeftParenthesis);
         ParseFormalParametersResult formalParameters = this->parseFormalParameters(firstRestricted);
         PatternNodeVector params = std::move(formalParameters.params);
@@ -6432,7 +6455,7 @@ public:
         scopeContexts.back()->insertName(id->name(), true);
         scopeContexts.back()->insertUsingName(id->name());
         pushScopeContext(params, id->name());
-        extractNamesFromFunctionParams(params);
+        extractFunctionParameterInfos(params, paramStart);
 
         bool previousStrict = this->context->strict;
         RefPtr<Node> body = this->parseFunctionSourceElements();
@@ -6504,6 +6527,7 @@ public:
             }
         }
 
+        MetaNode paramStart = this->createNode();
         this->expect(LeftParenthesis);
         ParseFormalParametersResult formalParameters = this->parseFormalParameters(firstRestricted);
         PatternNodeVector params = std::move(formalParameters.params);
@@ -6524,7 +6548,8 @@ public:
             scopeContexts.back()->insertUsingName(fnName);
         }
 
-        extractNamesFromFunctionParams(params);
+        extractFunctionParameterInfos(params, paramStart);
+
         bool previousStrict = this->context->strict;
         RefPtr<Node> body = this->parseFunctionSourceElements();
         if (this->context->strict && firstRestricted) {
@@ -6615,12 +6640,14 @@ public:
         this->context->allowYield = false;
         this->context->isMethodProperty = true;
         this->context->isConstructor = false;
-        RefPtr<Node> method = this->parsePropertyMethod(params, AtomicString());
+
+        pushScopeContext(params.params, AtomicString());
+
+        RefPtr<Node> method = this->parsePropertyMethod(params);
         this->context->allowYield = previousAllowYield;
         this->context->isMethodProperty = previousIsMethodProperty;
         this->context->isConstructor = previousIsConstructor;
 
-        extractNamesFromFunctionParams(params.params);
         return this->finalize(node, new FunctionExpressionNode(AtomicString(), std::move(params.params), method.get(), popScopeContext(node), isGenerator));
     }
 
@@ -6646,14 +6673,17 @@ public:
         }
         this->expect(RightParenthesis);
 
-        ParseFormalParametersResult options2(std::move(options.params), options.stricted, options.firstRestricted, options.message);
-        RefPtr<Node> method = this->parsePropertyMethod(options2, AtomicString());
+        ParseFormalParametersResult params(std::move(options.params), options.stricted, options.firstRestricted, options.message);
+
+        pushScopeContext(params.params, AtomicString());
+        extractFunctionParameterInfos(params.params, node);
+
+        RefPtr<Node> method = this->parsePropertyMethod(params);
         this->context->allowYield = previousAllowYield;
         this->context->isMethodProperty = previousIsMethodProperty;
         this->context->isConstructor = previousIsConstructor;
 
-        extractNamesFromFunctionParams(options.params);
-        return this->finalize(node, new FunctionExpressionNode(AtomicString(), std::move(options.params), method.get(), popScopeContext(node), isGenerator));
+        return this->finalize(node, new FunctionExpressionNode(AtomicString(), std::move(params.params), method.get(), popScopeContext(node), isGenerator));
     }
 
     FunctionExpressionNode* parseGeneratorMethod()
@@ -6669,7 +6699,10 @@ public:
         this->context.allowYield = true;
         const params = this->parseFormalParameters();
         this->context.allowYield = false;
-        const method = this->parsePropertyMethod(params, AtomicString());
+        pushScopeContext(params.params, AtomicString());
+        extractFunctionParameterInfos(params.params, node);
+
+        const method = this->parsePropertyMethod(params);
         this->context.allowYield = previousAllowYield;
 
         return this->finalize(node, new Node.FunctionExpression(null, params.params, method, isGenerator));
@@ -7164,7 +7197,22 @@ RefPtr<ProgramNode> parseProgram(::Escargot::Context* ctx, StringView source, Pa
 
 std::tuple<RefPtr<Node>, ASTScopeContext*> parseSingleFunction(::Escargot::Context* ctx, InterpretedCodeBlock* codeBlock, size_t stackRemain)
 {
-    Parser parser(ctx, codeBlock->src(), nullptr, stackRemain, codeBlock->sourceElementStart().line, codeBlock->sourceElementStart().column, codeBlock->sourceElementStart().index);
+    StringView src;
+    size_t line, column, index;
+
+    if (codeBlock->isSimpleParameterList()) {
+        src = codeBlock->src();
+        line = codeBlock->sourceElementStart().line;
+        column = codeBlock->sourceElementStart().column;
+        index = codeBlock->sourceElementStart().index;
+    } else {
+        src = codeBlock->extendedSrc();
+        line = codeBlock->sourceParamStart().line;
+        column = codeBlock->sourceParamStart().column;
+        index = codeBlock->sourceParamStart().index;
+    }
+
+    Parser parser(ctx, src, nullptr, stackRemain, line, column, index);
     parser.trackUsingNames = false;
     parser.config.parseSingleFunction = true;
     parser.config.parseSingleFunctionTarget = codeBlock;
@@ -7174,11 +7222,11 @@ std::tuple<RefPtr<Node>, ASTScopeContext*> parseSingleFunction(::Escargot::Conte
     parser.scopeContexts.pushBack(scopeCtx);
     RefPtr<Node> nd;
     if (codeBlock->isArrowFunctionExpression()) {
-        nd = parser.parseArrowFunctionSourceElements();
+        nd = parser.parseSingleArrowFunctionSource(codeBlock->isSimpleParameterList());
     } else if (codeBlock->isDefaultConstructorCodeBlock()) {
         nd = parser.parseDefaultConstructor();
     } else {
-        nd = parser.parseFunctionSourceElements();
+        nd = parser.parseSingleFunctionSource(codeBlock->isSimpleParameterList());
     }
     return std::make_tuple(nd, scopeCtx);
 }

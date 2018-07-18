@@ -76,7 +76,7 @@ CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     , m_nativeFunctionData(nullptr)
 {
     m_hasCallNativeFunctionCode = true;
-    m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = false;
+    m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = m_isSimpleParameterList = false;
     m_functionName = info.m_name;
     m_isStrict = info.m_isStrict;
     m_isConstructor = info.m_isConstructor;
@@ -114,7 +114,7 @@ CodeBlock::CodeBlock(Context* ctx, AtomicString name, size_t argc, bool isStrict
     , m_nativeFunctionData(nullptr)
 {
     m_hasCallNativeFunctionCode = true;
-    m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = false;
+    m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = m_isSimpleParameterList = false;
     m_functionName = name;
     m_isStrict = isStrict;
     m_isConstructor = isCtor;
@@ -173,7 +173,7 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     m_functionName = state.context()->staticStrings().boundFunction;
     m_hasCallNativeFunctionCode = true;
     m_isFunctionNameExplicitlyDeclared = m_isFunctionNameSaveOnHeap = false;
-    m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = false;
+    m_isFunctionExpression = m_isFunctionDeclaration = m_isArrowFunctionExpression = m_isFunctionDeclarationWithSpecialBinding = m_isSimpleParameterList = false;
     m_isConstructor = false;
     m_isStrict = false;
     m_hasEval = false;
@@ -218,6 +218,7 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
 
 InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, bool isStatic, bool isMethodProperty, bool isConstructor, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags)
     : m_sourceElementStart(sourceElementStart)
+    , m_sourceParamStart(SIZE_MAX, SIZE_MAX, SIZE_MAX)
     , m_identifierOnStackCount(0)
     , m_identifierOnHeapCount(0)
     , m_parentCodeBlock(nullptr)
@@ -239,6 +240,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isFunctionDeclarationWithSpecialBinding = false;
     m_isFunctionExpression = false;
     m_isArrowFunctionExpression = false;
+    m_isSimpleParameterList = false;
     m_isStrict = isStrict;
     m_hasEval = false;
     if (initFlags & CodeBlockInitFlag::CodeBlockHasEval) {
@@ -306,6 +308,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
 
 InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool isStatic, bool isMethodProperty, bool isConstructor, AtomicString functionName, AtomicString restName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags)
     : m_sourceElementStart(sourceElementStart)
+    , m_sourceParamStart(SIZE_MAX, SIZE_MAX, SIZE_MAX)
     , m_identifierOnStackCount(0)
     , m_identifierOnHeapCount(0)
     , m_parentCodeBlock(parentBlock)
@@ -392,6 +395,12 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
         m_isConstructor = false;
     } else {
         m_isArrowFunctionExpression = false;
+    }
+
+    if (initFlags & CodeBlockInitFlag::CodeBlockIsSimpleParameterList) {
+        m_isSimpleParameterList = true;
+    } else {
+        m_isSimpleParameterList = false;
     }
 
     m_canUseIndexedVariableStorage = !hasEvalWithYield() && !m_inCatch;

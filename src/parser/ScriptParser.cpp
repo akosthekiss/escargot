@@ -69,7 +69,13 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
                                                                             | (isFE ? CodeBlock::CodeBlockIsFunctionExpression : 0)
                                                                             | (isFD ? CodeBlock::CodeBlockIsFunctionDeclaration : 0)
                                                                             | (scopeCtx->m_isArrowFunctionExpression ? CodeBlock::CodeBlockIsArrowFunctionExpression : 0)
-                                                                            | (scopeCtx->m_needsSpecialInitialize ? CodeBlock::CodeBlockIsFunctionDeclarationWithSpecialBinding : 0)));
+                                                                            | (scopeCtx->m_needsSpecialInitialize ? CodeBlock::CodeBlockIsFunctionDeclarationWithSpecialBinding : 0)
+                                                                            | (scopeCtx->m_isSimpleParameterList ? CodeBlock::CodeBlockIsSimpleParameterList : 0)));
+
+        if (!scopeCtx->m_isSimpleParameterList) {
+            ASSERT(scopeCtx->m_locParamStart.index != SIZE_MAX);
+            codeBlock->setExtendedSource(StringView(source, scopeCtx->m_locParamStart.index, scopeCtx->m_locEnd.index), scopeCtx->m_locParamStart);
+        }
     }
 
 #ifndef NDEBUG

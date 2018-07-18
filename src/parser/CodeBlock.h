@@ -116,6 +116,7 @@ public:
         CodeBlockIsFunctionDeclarationWithSpecialBinding = 1 << 7,
         CodeBlockIsFunctionExpression = 1 << 8,
         CodeBlockIsArrowFunctionExpression = 1 << 9,
+        CodeBlockIsSimpleParameterList = 1 << 10,
     };
 
     struct IdentifierInfo {
@@ -216,6 +217,11 @@ public:
     bool isArrowFunctionExpression() const
     {
         return m_isArrowFunctionExpression;
+    }
+
+    bool isSimpleParameterList() const
+    {
+        return m_isSimpleParameterList;
     }
 
     bool needToLoadThisValue() const
@@ -360,6 +366,7 @@ protected:
     bool m_isFunctionDeclaration : 1;
     bool m_isFunctionDeclarationWithSpecialBinding : 1;
     bool m_isArrowFunctionExpression : 1;
+    bool m_isSimpleParameterList : 1;
     bool m_isInWithScope : 1;
     bool m_isEvalCodeInFunction : 1;
     bool m_isBindedFunction : 1;
@@ -593,9 +600,26 @@ public:
         return m_src;
     }
 
+    const StringView& extendedSrc()
+    {
+        return m_extendedSrc;
+    }
+
     ExtendedNodeLOC sourceElementStart()
     {
         return m_sourceElementStart;
+    }
+
+    ExtendedNodeLOC sourceParamStart()
+    {
+        return m_sourceParamStart;
+    }
+
+    void setExtendedSource(StringView src, ExtendedNodeLOC sourceParamStart)
+    {
+        ASSERT(!m_isSimpleParameterList);
+        m_extendedSrc = src;
+        m_sourceParamStart = sourceParamStart;
     }
 
 #ifndef NDEBUG
@@ -628,7 +652,9 @@ protected:
 
     Script* m_script;
     StringView m_src; // function source elements src
+    StringView m_extendedSrc; // function source including param elements
     ExtendedNodeLOC m_sourceElementStart;
+    ExtendedNodeLOC m_sourceParamStart;
 
     FunctionParametersInfoVector m_parametersInfomation;
     uint16_t m_identifierOnStackCount;
