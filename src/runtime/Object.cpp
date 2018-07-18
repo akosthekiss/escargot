@@ -373,7 +373,7 @@ void Object::setPrototype(ExecutionState& state, const Value& value)
     while (it.isObject()) {
         if (it.isObject() && it.asObject() == this) {
             ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "cyclic __proto__");
-        } else if (it.isObject() && it.asObject()->isOrdinary()) {
+        } else if (it.isObject() && !it.asObject()->isOrdinary()) {
             break;
         }
         Value proto = it.asObject()->getPrototype(state);
