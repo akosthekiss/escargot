@@ -5872,8 +5872,6 @@ public:
         RefPtr<Node> argument = nullptr;
         if (hasArgument) {
             argument = this->parseExpression();
-        } else if (this->context->isConstructor && this->context->isMethodProperty) {
-            argument = this->finalize(node, new ThisExpressionNode());
         }
         this->consumeSemicolon();
 
@@ -6309,10 +6307,9 @@ public:
             args.push_back(thisNode);
             args.push_back(arguments);
             expr = this->finalize(nodeStart, new CallExpressionNode(expr.get(), std::move(args)));
-            body->appendChild(this->finalize(nodeStart, new ReturnStatmentNode(expr.get())));
-        } else {
-            body->appendChild(this->finalize(nodeStart, new ReturnStatmentNode(thisNode.get())));
+            body->appendChild(this->finalize(nodeStart, new ExpressionStatementNode(expr.get())));
         }
+        body->appendChild(this->finalize(nodeStart, new ReturnStatmentNode(nullptr)));
         return this->finalize(nodeStart, new BlockStatementNode(body.get()));
     }
 

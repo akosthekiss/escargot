@@ -223,7 +223,7 @@ public:
         }
 
         if (callSuper) {
-            codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), dstRegister, REGULAR_REGISTER_LIMIT), context, this);
+            codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, dstRegister), context, this);
         }
         context->m_inCallingExpressionScope = prevInCallingExpressionScope;
 
