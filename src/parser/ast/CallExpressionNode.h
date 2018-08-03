@@ -217,14 +217,11 @@ public:
         }
 
         if (isCalleeHasReceiver) {
-            codeBlock->pushCode(CallFunctionWithReceiver(ByteCodeLOC(m_loc.index), receiverIndex, calleeIndex, argumentsStartIndex, m_arguments.size() + (callSuper ? 1 : 0), dstRegister), context, this);
+            codeBlock->pushCode(CallFunctionWithReceiver(ByteCodeLOC(m_loc.index), receiverIndex, calleeIndex, argumentsStartIndex, m_arguments.size() + (callSuper ? 1 : 0), dstRegister, callSuper), context, this);
         } else {
             codeBlock->pushCode(CallFunction(ByteCodeLOC(m_loc.index), calleeIndex, argumentsStartIndex, m_arguments.size(), dstRegister), context, this);
         }
 
-        if (callSuper) {
-            codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, dstRegister), context, this);
-        }
         context->m_inCallingExpressionScope = prevInCallingExpressionScope;
 
         context->m_canSkipCopyToRegister = directBefore;

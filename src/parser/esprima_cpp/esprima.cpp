@@ -6290,21 +6290,10 @@ public:
         InterpretedCodeBlock* currentTarget = config.parseSingleFunctionTarget->asInterpretedCodeBlock();
         MetaNode nodeStart = this->createNode();
         RefPtr<StatementContainer> body = StatementContainer::create();
-        RefPtr<Node> thisNode = this->finalize(nodeStart, new ThisExpressionNode());
         if (currentTarget->hasSuperClass()) {
-            RefPtr<Node> expr;
-            RefPtr<Node> __proto__ = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().__proto__));
-            RefPtr<Node> constructor = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().constructor));
-            RefPtr<Node> apply = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().apply));
+            RefPtr<Node> expr = this->finalize(nodeStart, new SuperNode(SuperNode::Kind::DefaultConstructor, this->context->isStatic));
             RefPtr<Node> arguments = this->finalize(nodeStart, new IdentifierNode(this->escargotContext->staticStrings().arguments));
-
-            expr = this->finalize(nodeStart, new MemberExpressionNode(thisNode.get(), __proto__.get(), true));
-            expr = this->finalize(nodeStart, new MemberExpressionNode(expr.get(), constructor.get(), true));
-            expr = this->finalize(nodeStart, new MemberExpressionNode(expr.get(), __proto__.get(), true));
-            expr = this->finalize(nodeStart, new MemberExpressionNode(expr.get(), apply.get(), true));
-
             ArgumentVector args;
-            args.push_back(thisNode);
             args.push_back(arguments);
             expr = this->finalize(nodeStart, new CallExpressionNode(expr.get(), std::move(args)));
             body->appendChild(this->finalize(nodeStart, new ExpressionStatementNode(expr.get())));

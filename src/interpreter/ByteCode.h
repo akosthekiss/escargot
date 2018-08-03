@@ -1142,12 +1142,13 @@ public:
 
 class CallFunctionWithReceiver : public ByteCode {
 public:
-    CallFunctionWithReceiver(const ByteCodeLOC& loc, const size_t& receiverIndex, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex)
+    CallFunctionWithReceiver(const ByteCodeLOC& loc, const size_t& receiverIndex, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool& callSuper = false)
         : ByteCode(Opcode::CallFunctionWithReceiverOpcode, loc)
         , m_receiverIndex(receiverIndex)
         , m_calleeIndex(calleeIndex)
         , m_argumentsStartIndex(argumentsStartIndex)
         , m_argumentCount(argumentCount)
+        , m_callSuper(callSuper)
         , m_resultIndex(resultIndex)
     {
     }
@@ -1156,6 +1157,7 @@ public:
     ByteCodeRegisterIndex m_calleeIndex;
     ByteCodeRegisterIndex m_argumentsStartIndex;
     uint16_t m_argumentCount;
+    bool m_callSuper: 1;
     ByteCodeRegisterIndex m_resultIndex;
 
 #ifndef NDEBUG

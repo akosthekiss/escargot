@@ -525,6 +525,13 @@ Value ByteCodeInterpreter::interpret(ExecutionState& state, ByteCodeBlock* byteC
                 const Value& callee = registerFile[code->m_calleeIndex];
                 const Value& receiver = registerFile[code->m_receiverIndex];
                 registerFile[code->m_resultIndex] = FunctionObject::call(state, callee, receiver, code->m_argumentCount, &registerFile[code->m_argumentsStartIndex]);
+                if (UNLIKELY(code->m_callSuper)) {
+                    if (registerFile[code->m_resultIndex].isObject()) {
+                        registerFile[code->m_argumentsStartIndex] = registerFile[code->m_resultIndex];
+                    } else {
+                        registerFile[code->m_resultIndex] = registerFile[code->m_argumentsStartIndex];
+                    }
+                }
                 ADD_PROGRAM_COUNTER(CallFunctionWithReceiver);
                 NEXT_INSTRUCTION();
             }

@@ -29,7 +29,8 @@ public:
         Undefined,
         Access,
         Assign,
-        Constructor
+        Constructor,
+        DefaultConstructor
     };
 
     SuperNode(Kind kind = Undefined, bool isStatic = false)
@@ -53,6 +54,13 @@ public:
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, reg, ctx->staticStrings().constructor), context, this);
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, reg, ctx->staticStrings().__proto__), context, this);
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, dstRegister, ctx->staticStrings().call), context, this);
+        } else if (kind() == Kind::DefaultConstructor) {
+            // super() this.__proto__.constructor.__proto__.apply
+            size_t reg = context->getRegister();
+            codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, reg, ctx->staticStrings().__proto__), context, this);
+            codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, reg, ctx->staticStrings().constructor), context, this);
+            codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, reg, ctx->staticStrings().__proto__), context, this);
+            codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), reg, dstRegister, ctx->staticStrings().apply), context, this);
         } else if (kind() == Kind::Access) {
             //  ... = super.<property> or super.<function>()
             if (m_isStatic) {
