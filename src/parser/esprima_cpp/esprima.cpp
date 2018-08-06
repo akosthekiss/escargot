@@ -6818,7 +6818,7 @@ public:
         return this->finalize(node, new MethodDefinitionNode(key.get(), computed, value.get(), kind, isStatic));
     }
 
-    PropertiesNodeVector parseClassElementList()
+    PropertiesNodeVector parseClassElementList(IdentifierNode* id, bool hasSuperClass)
     {
         PropertiesNodeVector body;
         bool hasConstructor = false;
@@ -6832,15 +6832,32 @@ public:
             }
         }
         this->expect(RightBrace);
+        if (!hasConstructor) {
+            MetaNode node = this->createNode();
+            PatternNodeVector params;
+            pushScopeContext(params, id ? id->name() : AtomicString());
+            scopeContexts.back()->m_isDefaultConstructor = true;
+            if (!this->config.parseSingleFunction) {
+                if (hasSuperClass) {
+                    scopeContexts.back()->insertUsingName(this->escargotContext->staticStrings().stringThis);
+                    scopeContexts.back()->insertUsingName(this->escargotContext->staticStrings().arguments);
+                }
+                scopeContexts.back()->m_nodeType = FunctionExpression;
+            } else {
+                this->config.parseSingleFunctionChildIndex = SmallValue(this->config.parseSingleFunctionChildIndex.asUint32() + 1);
+            }
+            popScopeContext(node);
+            body.push_back(this->finalize(node, new MethodDefinitionNode(id, false, nullptr, PropertyNode::Kind::Constructor, false)));
+        }
         return body;
     }
 
-    RefPtr<ClassBodyNode> parseClassBody()
+    RefPtr<ClassBodyNode> parseClassBody(IdentifierNode* id, bool hasSuperClass)
     {
         bool previousIsMethodProperty = this->context->isMethodProperty;
         this->context->isMethodProperty = true;
         MetaNode node = this->createNode();
-        PropertiesNodeVector elementList = this->parseClassElementList();
+        PropertiesNodeVector elementList = this->parseClassElementList(id, hasSuperClass);
 
         this->context->isMethodProperty = previousIsMethodProperty;
         return this->finalize(node, new ClassBodyNode(std::move(elementList)));
@@ -6869,7 +6886,7 @@ public:
         const bool previousAllowSuperCall = this->context->allowSuperCall;
         this->context->allowSuperCall = superClass ? true : false;
 
-        RefPtr<ClassBodyNode> classBody = this->parseClassBody();
+        RefPtr<ClassBodyNode> classBody = this->parseClassBody(id.get(), superClass != nullptr);
         this->context->strict = previousStrict;
         this->context->allowSuperCall = previousAllowSuperCall;
 
@@ -6898,7 +6915,7 @@ public:
 
         const bool previousAllowSuperCall = this->context->allowSuperCall;
         this->context->allowSuperCall = superClass ? true : false;
-        RefPtr<ClassBodyNode> classBody = this->parseClassBody();
+        RefPtr<ClassBodyNode> classBody = this->parseClassBody(id.get(), superClass != nullptr);
         this->context->strict = previousStrict;
         this->context->allowSuperCall = previousAllowSuperCall;
 

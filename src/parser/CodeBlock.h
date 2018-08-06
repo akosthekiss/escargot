@@ -117,6 +117,7 @@ public:
         CodeBlockIsFunctionExpression = 1 << 8,
         CodeBlockIsArrowFunctionExpression = 1 << 9,
         CodeBlockIsSimpleParameterList = 1 << 10,
+        CodeBlockIsDefaultConstructor = 1 << 11,
     };
 
     struct IdentifierInfo {
@@ -142,11 +143,6 @@ public:
     bool isMethodProperty() const
     {
         return m_isMethodProperty;
-    }
-
-    bool hasSuperClass() const
-    {
-        return m_hasSuperClass;
     }
 
     bool isStatic() const
@@ -375,7 +371,6 @@ protected:
     bool m_isMethodProperty : 1;
     bool m_isStatic : 1;
     bool m_isDefaultConstructor : 1;
-    bool m_hasSuperClass : 1;
     uint16_t m_parameterCount;
 
     AtomicString m_functionName;
@@ -595,6 +590,12 @@ public:
         return false;
     }
 
+    bool hasSuperClass() const
+    {
+        ASSERT(m_isDefaultConstructor);
+        return !m_identifierInfos.empty();
+    }
+
     const StringView& src()
     {
         return m_src;
@@ -647,8 +648,6 @@ protected:
     InterpretedCodeBlock(Context* ctx, Script* script, StringView src, bool isStrict, bool isStatic, bool isMethodProperty, bool isConstructor, ExtendedNodeLOC sourceElementStart, const ASTScopeContextNameInfoVector& innerIdentifiers, CodeBlockInitFlag initFlags);
     // init function codeBlock
     InterpretedCodeBlock(Context* ctx, Script* script, StringView src, ExtendedNodeLOC sourceElementStart, bool isStrict, bool isStatic, bool isMethodProperty, bool isConstructor, AtomicString functionName, AtomicString restName, const AtomicStringTightVector& parameterNames, const ASTScopeContextNameInfoVector& innerIdentifiers, InterpretedCodeBlock* parentBlock, CodeBlockInitFlag initFlags);
-    // default constructor
-    InterpretedCodeBlock(Context* ctx, Script* script, Node* name, bool hasSuperClass, InterpretedCodeBlock* parentBlock, ExtendedNodeLOC sourceElementStart);
 
     Script* m_script;
     StringView m_src; // function source elements src

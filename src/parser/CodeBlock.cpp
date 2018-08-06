@@ -98,7 +98,6 @@ CodeBlock::CodeBlock(Context* ctx, const NativeFunctionInfo& info)
     m_isMethodProperty = false;
     m_isDefaultConstructor = false;
     m_isStatic = false;
-    m_hasSuperClass = false;
 
     m_parameterCount = info.m_argumentCount;
 
@@ -138,7 +137,6 @@ CodeBlock::CodeBlock(Context* ctx, AtomicString name, size_t argc, bool isStrict
     m_isMethodProperty = false;
     m_isDefaultConstructor = false;
     m_isStatic = false;
-    m_hasSuperClass = false;
 }
 
 static Value functionBindImpl(ExecutionState& state, Value thisValue, size_t calledArgc, Value* calledArgv, bool isNewExpression)
@@ -194,7 +192,6 @@ CodeBlock::CodeBlock(ExecutionState& state, FunctionObject* targetFunction, Valu
     m_isMethodProperty = false;
     m_isDefaultConstructor = false;
     m_isStatic = false;
-    m_hasSuperClass = false;
 
     size_t targetFunctionLength = targetCodeBlock->parameterCount();
     m_parameterCount = targetFunctionLength > boundArgc ? targetFunctionLength - boundArgc : 0;
@@ -291,7 +288,6 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_isMethodProperty = isMethodProperty;
     m_isDefaultConstructor = false;
     m_isStatic = isStatic;
-    m_hasSuperClass = false;
 
     for (size_t i = 0; i < innerIdentifiers.size(); i++) {
         IdentifierInfo info;
@@ -403,6 +399,12 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
         m_isSimpleParameterList = false;
     }
 
+    if (initFlags & CodeBlockInitFlag::CodeBlockIsDefaultConstructor) {
+        m_isDefaultConstructor = true;
+    } else {
+        m_isDefaultConstructor = false;
+    }
+
     m_canUseIndexedVariableStorage = !hasEvalWithYield() && !m_inCatch;
 
     if (m_inWith) {
@@ -433,9 +435,7 @@ InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, StringV
     m_needsVirtualIDOperation = false;
     m_needToLoadThisValue = false;
     m_isMethodProperty = isMethodProperty;
-    m_isDefaultConstructor = false;
     m_isStatic = isStatic;
-    m_hasSuperClass = false;
 }
 
 bool InterpretedCodeBlock::needToStoreThisValue()
@@ -695,17 +695,5 @@ void InterpretedCodeBlock::computeVariables()
         m_identifierOnStackCount = s;
         m_identifierOnHeapCount = h;
     }
-}
-
-InterpretedCodeBlock::InterpretedCodeBlock(Context* ctx, Script* script, Node* name, bool hasSuperClass, InterpretedCodeBlock* parentBlock, ExtendedNodeLOC sourceElementStart)
-    : InterpretedCodeBlock(ctx, script, StringView(), sourceElementStart, true, false, true, true, AtomicString(), AtomicString(), AtomicStringTightVector(), ASTScopeContextNameInfoVector(), parentBlock, CodeBlockInitFlag::CodeBlockIsFunctionExpression)
-{
-    if (name && name->isIdentifier()) {
-        m_functionName = name->asIdentifier()->name();
-    }
-    m_hasSuperClass = hasSuperClass;
-    m_isDefaultConstructor = true;
-    captureArguments();
-    computeVariables();
 }
 }

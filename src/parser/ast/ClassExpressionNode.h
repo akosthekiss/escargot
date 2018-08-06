@@ -46,13 +46,6 @@ public:
     }
 
     virtual ASTNodeType type() { return ASTNodeType::ClassExpression; }
-    void generateEmptyConstructor(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeRegisterIndex dstRegister)
-    {
-        Context* ctx = codeBlock->m_codeBlock->context();
-        InterpretedCodeBlock* currentBlk = context->m_codeBlock->asInterpretedCodeBlock();
-        InterpretedCodeBlock* blk = new InterpretedCodeBlock(ctx, currentBlk->script(), id() ? id() : targetId(), superClass() ? true : false, currentBlk, ExtendedNodeLOC(0, 0, m_loc.index));
-        codeBlock->pushCode(CreateFunction(ByteCodeLOC(m_loc.index), dstRegister, blk), context, this);
-    }
 
     void definePropertyMethod(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, MethodDefinitionNode* m, String* keyString, ByteCodeRegisterIndex targetRegister, ByteCodeRegisterIndex valueRegister)
     {
@@ -105,6 +98,24 @@ public:
     virtual void generateExpressionByteCode(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeRegisterIndex dstRegister)
     {
         Context* ctx = codeBlock->m_codeBlock->context();
+
+        Node* super = superClass();
+        if (super && super->type() == ASTNodeType::SequenceExpression) {
+            const ExpressionNodeVector& nodeVector = static_cast<SequenceExpressionNode*>(super)->expressions();
+            for (size_t i = 0; i < nodeVector.size() - 1; i++) {
+                size_t tmpRegister = context->getRegister();
+                nodeVector[i]->generateExpressionByteCode(codeBlock, context, tmpRegister);
+                context->giveUpRegister();
+            }
+            super = nodeVector.back().get();
+        }
+
+        size_t superRegister = context->getRegister();
+        if (super) {
+            superRegister = context->getRegister();
+            super->generateExpressionByteCode(codeBlock, context, superRegister);
+        }
+
         bool hasProtoMember = false;
         bool hasConstructor = false;
         size_t regSize = 0;
@@ -124,32 +135,15 @@ public:
                 hasProtoMember = true;
             }
         }
-
-        Node* super = superClass();
-        if (super && super->type() == ASTNodeType::SequenceExpression) {
-            const ExpressionNodeVector& nodeVector = static_cast<SequenceExpressionNode*>(super)->expressions();
-            for (size_t i = 0; i < nodeVector.size() - 1; i++) {
-                size_t tmpRegister = context->getRegister();
-                nodeVector[i]->generateExpressionByteCode(codeBlock, context, tmpRegister);
-                context->giveUpRegister();
-            }
-            super = nodeVector.back().get();
-        }
-
-        if (!hasConstructor) {
-            generateEmptyConstructor(codeBlock, context, dstRegister);
-        }
-
+        ASSERT(hasConstructor);
 
         if (super) {
             size_t superProtoRegister = context->getRegister();
-            size_t superRegister = context->getRegister();
             size_t objectRegister = context->getRegister();
             size_t funcRegister = context->getRegister();
             size_t resultRegister = context->getRegister();
 
             // SubClass.prototype = Object.create(SuperClass.prototype);
-            super->generateExpressionByteCode(codeBlock, context, superRegister);
             codeBlock->pushCode(GetGlobalObject(ByteCodeLOC(m_loc.index), objectRegister, ctx->staticStrings().Object), context, this);
             codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), objectRegister, funcRegister, ctx->staticStrings().create), context, this);
 
@@ -175,16 +169,11 @@ public:
             context->giveUpRegister();
             context->giveUpRegister();
             context->giveUpRegister();
-            context->giveUpRegister();
         }
 
         protoRegister = context->getRegister();
         codeBlock->pushCode(GetObjectPreComputedCase(ByteCodeLOC(m_loc.index), dstRegister, protoRegister, codeBlock->m_codeBlock->context()->staticStrings().prototype), context, this);
         regSize++;
-
-        if (!hasConstructor) {
-            definePropertyMethod(codeBlock, context, nullptr, ctx->staticStrings().constructor.string(), protoRegister, dstRegister);
-        }
 
         size_t regIdx = regSize;
         for (size_t i = 0; i < body.size(); i++) {
@@ -229,6 +218,9 @@ public:
         }
 
         for (size_t i = 0; i < regSize; i++) {
+            context->giveUpRegister();
+        }
+        if (super) {
             context->giveUpRegister();
         }
     }

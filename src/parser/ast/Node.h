@@ -339,6 +339,7 @@ struct ASTScopeContext : public gc {
     bool m_isConstructor : 1;
     bool m_isMethodProperty : 1;
     bool m_hasManyNumeralLiteral : 1;
+    bool m_isDefaultConstructor : 1;
     bool m_needsSpecialInitialize : 1; // flag for fd in catch
     bool m_isSimpleParameterList : 1;
     ASTNodeType m_nodeType : 12;

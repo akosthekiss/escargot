@@ -68,6 +68,7 @@ InterpretedCodeBlock* ScriptParser::generateCodeBlockTreeFromASTWalker(Context* 
                                                                             | (scopeCtx->m_inWith ? CodeBlock::CodeBlockInWith : 0)
                                                                             | (isFE ? CodeBlock::CodeBlockIsFunctionExpression : 0)
                                                                             | (isFD ? CodeBlock::CodeBlockIsFunctionDeclaration : 0)
+                                                                            | (scopeCtx->m_isDefaultConstructor ? CodeBlock::CodeBlockIsDefaultConstructor : 0)
                                                                             | (scopeCtx->m_isArrowFunctionExpression ? CodeBlock::CodeBlockIsArrowFunctionExpression : 0)
                                                                             | (scopeCtx->m_needsSpecialInitialize ? CodeBlock::CodeBlockIsFunctionDeclarationWithSpecialBinding : 0)
                                                                             | (scopeCtx->m_isSimpleParameterList ? CodeBlock::CodeBlockIsSimpleParameterList : 0)));
