@@ -110,7 +110,7 @@ public:
             super = nodeVector.back().get();
         }
 
-        size_t superRegister = context->getRegister();
+        size_t superRegister = 0;
         if (super) {
             superRegister = context->getRegister();
             super->generateExpressionByteCode(codeBlock, context, superRegister);
