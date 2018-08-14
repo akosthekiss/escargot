@@ -512,8 +512,12 @@ Value ByteCodeInterpreter::interpret(ExecutionState& state, ByteCodeBlock* byteC
                 :
             {
                 CallFunction* code = (CallFunction*)programCounter;
-                const Value& callee = registerFile[code->m_calleeIndex];
-                registerFile[code->m_resultIndex] = FunctionObject::call(state, callee, Value(), code->m_argumentCount, &registerFile[code->m_argumentsStartIndex]);
+                if (UNLIKELY(code->m_useSpreadArgument)) {
+                    callFunctionWithSpreadArgument(state, code, registerFile);
+                } else {
+                    const Value& callee = registerFile[code->m_calleeIndex];
+                    registerFile[code->m_resultIndex] = FunctionObject::call(state, callee, Value(), code->m_argumentCount, &registerFile[code->m_argumentsStartIndex]);
+                }
                 ADD_PROGRAM_COUNTER(CallFunction);
                 NEXT_INSTRUCTION();
             }
@@ -522,9 +526,13 @@ Value ByteCodeInterpreter::interpret(ExecutionState& state, ByteCodeBlock* byteC
                 :
             {
                 CallFunctionWithReceiver* code = (CallFunctionWithReceiver*)programCounter;
-                const Value& callee = registerFile[code->m_calleeIndex];
-                const Value& receiver = registerFile[code->m_receiverIndex];
-                registerFile[code->m_resultIndex] = FunctionObject::call(state, callee, receiver, code->m_argumentCount, &registerFile[code->m_argumentsStartIndex]);
+                if (UNLIKELY(code->m_useSpreadArgument)) {
+                    callFunctionWithReceiverAndSpreadArgument(state, code, registerFile);
+                } else {
+                    const Value& callee = registerFile[code->m_calleeIndex];
+                    const Value& receiver = registerFile[code->m_receiverIndex];
+                    registerFile[code->m_resultIndex] = FunctionObject::call(state, callee, receiver, code->m_argumentCount, &registerFile[code->m_argumentsStartIndex]);
+                }
                 if (UNLIKELY(code->m_callSuper)) {
                     if (registerFile[code->m_resultIndex].isObject()) {
                         registerFile[code->m_argumentsStartIndex] = registerFile[code->m_resultIndex];
@@ -2020,6 +2028,91 @@ NEVER_INLINE bool ByteCodeInterpreter::binaryInOperation(ExecutionState& state, 
     // https://www.ecma-international.org/ecma-262/5.1/#sec-11.8.7
     // Return the result of calling the [[HasProperty]] internal method of rval with argument ToString(lval).
     return right.toObject(state)->hasProperty(state, ObjectPropertyName(state, left));
+}
+
+NEVER_INLINE void ByteCodeInterpreter::callFunctionWithSpreadArgument(ExecutionState& state, CallFunction* code, Value* registerFile)
+{
+    ASSERT(code->m_useSpreadArgument);
+
+    size_t arglen = 0;
+    Value* arguments = nullptr;
+    std::vector<uint16_t>& spreadArgumentIndex = code->m_spreadIndexData->m_spreadIndex;
+    std::vector<Value, GCUtil::gc_malloc_ignore_off_page_allocator<Value>> spreadArguments;
+    Value thisArray = state.context()->globalObject()->array();
+
+    for (size_t i = 0; i < code->m_argumentCount; i++) {
+        if (std::find(spreadArgumentIndex.begin(), spreadArgumentIndex.end(), static_cast<uint16_t>(i)) != spreadArgumentIndex.end()) {
+            Value spreadElement = ArrayObject::arrayFrom(state, thisArray, registerFile[code->m_argumentsStartIndex + i]);
+
+            ASSERT(spreadElement.isObject() && spreadElement.asObject()->isArrayObject());
+
+            spreadArguments.push_back(spreadElement);
+            arglen += static_cast<size_t>(spreadElement.asObject()->asArrayObject()->length(state));
+            continue;
+        }
+        arglen++;
+    }
+
+    size_t argIndex = 0, spreadIndex = 0;
+    arguments = ALLOCA(sizeof(Value) * arglen, Value, state);
+    for (size_t i = 0; i < code->m_argumentCount; i++) {
+        if (spreadIndex < spreadArgumentIndex.size() && i == spreadArgumentIndex[spreadIndex]) {
+            ArrayObject* spreadElement = spreadArguments[spreadIndex++].asObject()->asArrayObject();
+            for (size_t j = 0; j < static_cast<size_t>(spreadElement->length(state)); j++) {
+                ASSERT(argIndex < arglen);
+                arguments[argIndex++] = spreadElement->getIndexedProperty(state, Value(j)).value(state, spreadElement);
+            }
+        } else {
+            ASSERT(argIndex < arglen);
+            arguments[argIndex++] = registerFile[code->m_argumentsStartIndex + i];
+        }
+    }
+
+    const Value& callee = registerFile[code->m_calleeIndex];
+    registerFile[code->m_resultIndex] = FunctionObject::call(state, callee, Value(), arglen, arguments);
+}
+
+NEVER_INLINE void ByteCodeInterpreter::callFunctionWithReceiverAndSpreadArgument(ExecutionState& state, CallFunctionWithReceiver* code, Value* registerFile)
+{
+    ASSERT(code->m_useSpreadArgument);
+
+    size_t arglen = 0;
+    Value* arguments = nullptr;
+    std::vector<uint16_t>& spreadArgumentIndex = code->m_spreadIndexData->m_spreadIndex;
+    std::vector<Value, GCUtil::gc_malloc_ignore_off_page_allocator<Value>> spreadArguments;
+    Value thisArray = state.context()->globalObject()->array();
+
+    for (size_t i = 0; i < code->m_argumentCount; i++) {
+        if (std::find(spreadArgumentIndex.begin(), spreadArgumentIndex.end(), static_cast<uint16_t>(i)) != spreadArgumentIndex.end()) {
+            Value spreadElement = ArrayObject::arrayFrom(state, thisArray, registerFile[code->m_argumentsStartIndex + i]);
+
+            ASSERT(spreadElement.isObject() && spreadElement.asObject()->isArrayObject());
+
+            spreadArguments.push_back(spreadElement);
+            arglen += static_cast<size_t>(spreadElement.asObject()->asArrayObject()->length(state));
+            continue;
+        }
+        arglen++;
+    }
+
+    size_t argIndex = 0, spreadIndex = 0;
+    arguments = ALLOCA(sizeof(Value) * arglen, Value, state);
+    for (size_t i = 0; i < code->m_argumentCount; i++) {
+        if (spreadIndex < spreadArgumentIndex.size() && i == spreadArgumentIndex[spreadIndex]) {
+            ArrayObject* spreadElement = spreadArguments[spreadIndex++].asObject()->asArrayObject();
+            for (size_t j = 0; j < static_cast<size_t>(spreadElement->length(state)); j++) {
+                ASSERT(argIndex < arglen);
+                arguments[argIndex++] = spreadElement->getIndexedProperty(state, Value(j)).value(state, spreadElement);
+            }
+        } else {
+            ASSERT(argIndex < arglen);
+            arguments[argIndex++] = registerFile[code->m_argumentsStartIndex + i];
+        }
+    }
+
+    const Value& callee = registerFile[code->m_calleeIndex];
+    const Value& receiver = registerFile[code->m_receiverIndex];
+    registerFile[code->m_resultIndex] = FunctionObject::call(state, callee, receiver, arglen, arguments);
 }
 
 NEVER_INLINE Value ByteCodeInterpreter::callFunctionInWithScope(ExecutionState& state, CallFunctionInWithScope* code, ExecutionContext* ec, LexicalEnvironment* env, Value* argv)

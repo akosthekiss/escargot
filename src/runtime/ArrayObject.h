@@ -75,6 +75,7 @@ public:
     static void iterateArrays(ExecutionState& state, HeapObjectIteratorCallback callback);
     static Value arrayLengthNativeGetter(ExecutionState& state, Object* self);
     static bool arrayLengthNativeSetter(ExecutionState& state, Object* self, const Value& newData);
+    static Value arrayFrom(ExecutionState& state, Value thisValue, Value item);
 
     // http://www.ecma-international.org/ecma-262/5.1/#sec-8.6.2
     virtual const char* internalClassProperty() override

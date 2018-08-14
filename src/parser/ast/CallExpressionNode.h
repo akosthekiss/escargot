@@ -29,12 +29,13 @@ namespace Escargot {
 class CallExpressionNode : public ExpressionNode {
 public:
     friend class ScriptParser;
-    CallExpressionNode(Node* callee, ArgumentVector&& arguments, bool useSuper = false)
+    CallExpressionNode(Node* callee, ArgumentVector&& arguments, bool useSuper = false, bool useSpreadArgument = false)
         : ExpressionNode()
+        , m_callee(callee)
+        , m_arguments(arguments)
+        , m_useSuper(useSuper)
+        , m_useSpreadArgument(useSpreadArgument)
     {
-        m_callee = callee;
-        m_arguments = arguments;
-        m_useSuper = useSuper;
     }
 
     virtual ~CallExpressionNode()
@@ -43,7 +44,7 @@ public:
 
     Node* callee() { return m_callee.get(); }
     virtual ASTNodeType type() { return ASTNodeType::CallExpression; }
-    ByteCodeRegisterIndex generateArguments(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, bool clearInCallingExpressionScope = true)
+    ByteCodeRegisterIndex generateArguments(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, SpreadIndexData*& spreadIndexData, bool clearInCallingExpressionScope = true)
     {
         context->m_inCallingExpressionScope = !clearInCallingExpressionScope;
 
@@ -51,6 +52,7 @@ public:
         context->giveUpRegister();
 
         bool callSuper = m_callee->type() == ASTNodeType::Super;
+        size_t addIndex = callSuper ? 1 : 0;
         ByteCodeRegisterIndex implicitThisReg;
         if (callSuper) {
             implicitThisReg = context->getRegister();
@@ -66,9 +68,8 @@ public:
             bool isSorted = true;
 
             auto k = callSuper ? implicitThisReg : regs[0];
-            size_t add = callSuper ? 1 : 0;
-            for (size_t i = 1 - add; i < m_arguments.size(); i++) {
-                if (k + i + add != regs[i]) {
+            for (size_t i = 1 - addIndex; i < m_arguments.size(); i++) {
+                if (k + i + addIndex != regs[i]) {
                     isSorted = false;
                     break;
                 }
@@ -80,10 +81,19 @@ public:
                 if (callSuper) {
                     codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, implicitThisReg), context, this);
                 }
+
                 for (size_t i = 0; i < m_arguments.size(); i++) {
                     regs[i] = m_arguments[i]->getRegister(codeBlock, context);
                     m_arguments[i]->generateExpressionByteCode(codeBlock, context, regs[i]);
+                    if (UNLIKELY(m_useSpreadArgument && m_arguments[i]->type() == SpreadElement)) {
+                        if (!spreadIndexData) {
+                            spreadIndexData = new SpreadIndexData();
+                            codeBlock->m_literalData.pushBack(spreadIndexData);
+                        }
+                        spreadIndexData->m_spreadIndex.push_back(static_cast<uint16_t>(i + addIndex));
+                    }
                 }
+
                 for (size_t i = 0; i < m_arguments.size(); i++) {
                     context->giveUpRegister();
                 }
@@ -97,9 +107,17 @@ public:
         if (callSuper) {
             codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), REGULAR_REGISTER_LIMIT, implicitThisReg), context, this);
         }
+
         for (size_t i = 0; i < m_arguments.size(); i++) {
             size_t registerExpect = context->getRegister();
             m_arguments[i]->generateExpressionByteCode(codeBlock, context, registerExpect);
+            if (UNLIKELY(m_useSpreadArgument && m_arguments[i]->type() == SpreadElement)) {
+                if (!spreadIndexData) {
+                    spreadIndexData = new SpreadIndexData();
+                    codeBlock->m_literalData.pushBack(spreadIndexData);
+                }
+                spreadIndexData->m_spreadIndex.push_back(static_cast<uint16_t>(i + addIndex));
+            }
         }
 
         for (size_t i = 0; i < m_arguments.size(); i++) {
@@ -156,10 +174,11 @@ public:
 
     virtual void generateExpressionByteCode(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeRegisterIndex dstRegister)
     {
+        SpreadIndexData* spreadIndexData = nullptr;
         if (m_callee->isIdentifier() && m_callee->asIdentifier()->name().string()->equals("eval")) {
             size_t evalIndex = context->getRegister();
             codeBlock->pushCode(LoadByName(ByteCodeLOC(m_loc.index), evalIndex, codeBlock->m_codeBlock->context()->staticStrings().eval), context, this);
-            size_t startIndex = generateArguments(codeBlock, context, false);
+            size_t startIndex = generateArguments(codeBlock, context, spreadIndexData, false);
             context->giveUpRegister();
             codeBlock->pushCode(CallEvalFunction(ByteCodeLOC(m_loc.index), evalIndex, startIndex, m_arguments.size(), dstRegister, context->m_isWithScope), context, this);
             return;
@@ -177,7 +196,7 @@ public:
             // CallFunction should check whether receiver is global obj or with obj.
             ASSERT(m_callee->isIdentifier());
             AtomicString calleeName = m_callee->asIdentifier()->name();
-            size_t startIndex = generateArguments(codeBlock, context);
+            size_t startIndex = generateArguments(codeBlock, context, spreadIndexData);
             context->m_inCallingExpressionScope = prevInCallingExpressionScope;
             codeBlock->pushCode(CallFunctionInWithScope(ByteCodeLOC(m_loc.index), calleeName, startIndex, m_arguments.size(), dstRegister), context, this);
             return;
@@ -206,7 +225,7 @@ public:
             }
         }
 
-        size_t argumentsStartIndex = generateArguments(codeBlock, context);
+        size_t argumentsStartIndex = generateArguments(codeBlock, context, spreadIndexData);
 
         // drop callee, receiver registers
         if (isCalleeHasReceiver) {
@@ -217,11 +236,14 @@ public:
         }
 
         if (isCalleeHasReceiver) {
-            codeBlock->pushCode(CallFunctionWithReceiver(ByteCodeLOC(m_loc.index), receiverIndex, calleeIndex, argumentsStartIndex, m_arguments.size() + (callSuper ? 1 : 0), dstRegister, callSuper), context, this);
+            codeBlock->pushCode(CallFunctionWithReceiver(ByteCodeLOC(m_loc.index), receiverIndex, calleeIndex, argumentsStartIndex, m_arguments.size() + (callSuper ? 1 : 0), dstRegister, callSuper, m_useSpreadArgument, spreadIndexData), context, this);
         } else {
-            codeBlock->pushCode(CallFunction(ByteCodeLOC(m_loc.index), calleeIndex, argumentsStartIndex, m_arguments.size(), dstRegister), context, this);
+            codeBlock->pushCode(CallFunction(ByteCodeLOC(m_loc.index), calleeIndex, argumentsStartIndex, m_arguments.size(), dstRegister, m_useSpreadArgument, spreadIndexData), context, this);
         }
 
+        if (callSuper) {
+            codeBlock->pushCode(Move(ByteCodeLOC(m_loc.index), dstRegister, REGULAR_REGISTER_LIMIT), context, this);
+        }
         context->m_inCallingExpressionScope = prevInCallingExpressionScope;
 
         context->m_canSkipCopyToRegister = directBefore;
@@ -239,6 +261,7 @@ protected:
     RefPtr<Node> m_callee; // callee: Expression;
     ArgumentVector m_arguments; // arguments: [ Expression ];
     bool m_useSuper;
+    bool m_useSpreadArgument;
 };
 }
 

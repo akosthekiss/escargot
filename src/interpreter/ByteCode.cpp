@@ -158,4 +158,16 @@ void* EnumerateObjectData::operator new(size_t size)
     }
     return GC_MALLOC_EXPLICITLY_TYPED(size, descr);
 }
+
+void* SpreadIndexData::operator new(size_t size)
+{
+    static bool typeInited = false;
+    static GC_descr descr;
+    if (!typeInited) {
+        GC_word obj_bitmap[GC_BITMAP_SIZE(SpreadIndexData)] = { 0 };
+        descr = GC_make_descriptor(obj_bitmap, GC_WORD_LEN(SpreadIndexData));
+        typeInited = true;
+    }
+    return GC_MALLOC_EXPLICITLY_TYPED(size, descr);
+}
 }

@@ -4218,7 +4218,7 @@ public:
     }
     // ECMA-262 12.3 Left-Hand-Side Expressions
 
-    ArgumentVector parseArguments()
+    ArgumentVector parseArguments(bool& useSpreadArgument)
     {
         this->expect(LeftParenthesis);
         ArgumentVector args;
@@ -4226,6 +4226,7 @@ public:
             while (true) {
                 RefPtr<Node> expr;
                 if (this->match(PeriodPeriodPeriod)) {
+                    useSpreadArgument = true;
                     expr = this->parseSpreadElement();
                 } else {
                     expr = this->isolateCoverGrammar(&Parser::parseAssignmentExpression);
@@ -4279,9 +4280,10 @@ public:
 
         Node* expr;
         RefPtr<Node> callee = this->isolateCoverGrammar(&Parser::parseLeftHandSideExpression);
+        bool useSpreadArgument = false;
         ArgumentVector args;
         if (this->match(LeftParenthesis))
-            args = this->parseArguments();
+            args = this->parseArguments(useSpreadArgument);
         if (args.size() > 65535) {
             this->throwError("too many arguments in new");
         }
@@ -4330,7 +4332,8 @@ public:
             } else if (this->match(LeftParenthesis)) {
                 this->context->isBindingElement = false;
                 this->context->isAssignmentTarget = false;
-                ArgumentVector args = this->parseArguments();
+                bool useSpreadArgument = false;
+                ArgumentVector args = this->parseArguments(useSpreadArgument);
                 bool useSuper = false;
                 if (!isFirst && super) {
                     super->setKind(SuperNode::Kind::Access);
@@ -4341,7 +4344,7 @@ public:
                 if (args.size() > 65535) {
                     this->throwError("too many arguments in call");
                 }
-                expr = this->finalize(this->startNode(startToken), new CallExpressionNode(expr.get(), std::move(args), useSuper));
+                expr = this->finalize(this->startNode(startToken), new CallExpressionNode(expr.get(), std::move(args), useSuper, useSpreadArgument));
 
             } else if (this->match(LeftSquareBracket)) {
                 this->context->isBindingElement = false;

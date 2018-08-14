@@ -46,7 +46,6 @@ public:
     }
 
     virtual ASTNodeType type() { return ASTNodeType::ClassExpression; }
-
     void definePropertyMethod(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, MethodDefinitionNode* m, String* keyString, ByteCodeRegisterIndex targetRegister, ByteCodeRegisterIndex valueRegister)
     {
         Context* ctx = codeBlock->m_codeBlock->context();

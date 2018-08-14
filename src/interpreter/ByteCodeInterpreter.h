@@ -35,6 +35,8 @@ struct SetObjectInlineCache;
 struct EnumerateObjectData;
 class GetGlobalObject;
 class SetGlobalObject;
+class CallFunction;
+class CallFunctionWithReceiver;
 class CallFunctionInWithScope;
 class CallEvalFunction;
 class WithOperation;
@@ -83,6 +85,9 @@ public:
     static void evalOperation(ExecutionState& state, CallEvalFunction* code, Value* registerFile, ByteCodeBlock* byteCodeBlock, ExecutionContext* ec);
     static Value withOperation(ExecutionState& state, WithOperation* code, Object* obj, ExecutionContext* ec, LexicalEnvironment* env, size_t& programCounter, ByteCodeBlock* byteCodeBlock, Value* registerFile, Value* stackStorage);
     static bool binaryInOperation(ExecutionState& state, const Value& left, const Value& right);
+
+    static void callFunctionWithSpreadArgument(ExecutionState& state, CallFunction* code, Value* registerFile);
+    static void callFunctionWithReceiverAndSpreadArgument(ExecutionState& state, CallFunctionWithReceiver* code, Value* registerFile);
     static Value callFunctionInWithScope(ExecutionState& state, CallFunctionInWithScope* code, ExecutionContext* ec, LexicalEnvironment* env, Value* argv);
 
     static void declareFunctionDeclarations(ExecutionState& state, DeclareFunctionDeclarations* code, LexicalEnvironment* lexicalEnvironment, Value* stackStorage);

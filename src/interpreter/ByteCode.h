@@ -1117,20 +1117,35 @@ public:
 #endif
 };
 
+struct SpreadIndexData {
+    std::vector<uint16_t> m_spreadIndex;
+
+    SpreadIndexData()
+    {
+    }
+
+    void* operator new(size_t size);
+    void* operator new[](size_t size) = delete;
+};
+
 class CallFunction : public ByteCode {
 public:
-    CallFunction(const ByteCodeLOC& loc, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex)
+    CallFunction(const ByteCodeLOC& loc, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool useSpreadArgument = 0, SpreadIndexData* spreadIndexData = nullptr)
         : ByteCode(Opcode::CallFunctionOpcode, loc)
         , m_calleeIndex(calleeIndex)
         , m_argumentsStartIndex(argumentsStartIndex)
         , m_argumentCount(argumentCount)
         , m_resultIndex(resultIndex)
+        , m_useSpreadArgument(useSpreadArgument)
+        , m_spreadIndexData(spreadIndexData)
     {
     }
     ByteCodeRegisterIndex m_calleeIndex;
     ByteCodeRegisterIndex m_argumentsStartIndex;
     uint16_t m_argumentCount;
     ByteCodeRegisterIndex m_resultIndex;
+    bool m_useSpreadArgument : 1;
+    SpreadIndexData* m_spreadIndexData;
 
 #ifndef NDEBUG
     virtual void dump()
@@ -1142,14 +1157,16 @@ public:
 
 class CallFunctionWithReceiver : public ByteCode {
 public:
-    CallFunctionWithReceiver(const ByteCodeLOC& loc, const size_t& receiverIndex, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool& callSuper = false)
+    CallFunctionWithReceiver(const ByteCodeLOC& loc, const size_t& receiverIndex, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool callSuper = false, const bool useSpreadArgument = false, SpreadIndexData* spreadIndexData = nullptr)
         : ByteCode(Opcode::CallFunctionWithReceiverOpcode, loc)
         , m_receiverIndex(receiverIndex)
         , m_calleeIndex(calleeIndex)
         , m_argumentsStartIndex(argumentsStartIndex)
         , m_argumentCount(argumentCount)
-        , m_callSuper(callSuper)
         , m_resultIndex(resultIndex)
+        , m_callSuper(callSuper)
+        , m_useSpreadArgument(useSpreadArgument)
+        , m_spreadIndexData(spreadIndexData)
     {
     }
 
@@ -1157,8 +1174,10 @@ public:
     ByteCodeRegisterIndex m_calleeIndex;
     ByteCodeRegisterIndex m_argumentsStartIndex;
     uint16_t m_argumentCount;
-    bool m_callSuper: 1;
     ByteCodeRegisterIndex m_resultIndex;
+    bool m_callSuper : 1;
+    bool m_useSpreadArgument : 1;
+    SpreadIndexData* m_spreadIndexData;
 
 #ifndef NDEBUG
     virtual void dump()

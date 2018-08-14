@@ -243,6 +243,102 @@ void ArrayObject::iterateArrays(ExecutionState& state, HeapObjectIteratorCallbac
     iterateSpecificKindOfObject(state, HeapObjectKind::ArrayObjectKind, callback);
 }
 
+Value ArrayObject::arrayFrom(ExecutionState& state, Value thisValue, Value item)
+{
+    // Let C be the this value.
+    Value C = thisValue;
+    // If mapfn is undefined, let mapping be false.
+
+    // Let usingIterator be ? GetMethod(item, @@iterator).
+    item = item.toObject(state);
+    Value usingIterator = item.asObject()->get(state, ObjectPropertyName(state, state.context()->vmInstance()->globalSymbols().iterator)).value(state, item);
+    // If usingIterator is not undefined, then
+    if (!usingIterator.isUndefinedOrNull()) {
+        Object* A;
+        // If IsConstructor(C) is true, then
+        if (C.isFunction() && C.asFunction()->isConstructor()) {
+            // Let A be ? Construct(C).
+            A = C.asFunction()->newInstance(state, 0, nullptr);
+        } else {
+            // Let A be ArrayCreate(0).
+            A = new ArrayObject(state);
+        }
+        // Let iterator be ? GetIterator(item, usingIterator).
+        // Let iterator be ? Call(method, obj).
+        Value willIterator = FunctionObject::call(state, usingIterator, item, 0, nullptr);
+        // If Type(iterator) is not Object, throw a TypeError exception.
+        if (!willIterator.isObject()) {
+            ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "Got invalid Iterator");
+        }
+        Object* iterator = willIterator.asObject();
+        // Let k be 0.
+        double k = 0;
+        // Repeat
+        while (true) {
+            // If k ≥ 2^53-1, then
+            if (k >= ((1LL << 53LL) - 1LL)) {
+                // Let error be Completion{[[Type]]: throw, [[Value]]: a newly created TypeError object, [[Target]]: empty}.
+                // Return ? IteratorClose(iterator, error).
+                ErrorObject::throwBuiltinError(state, ErrorObject::TypeError, "Got invalid index");
+            }
+            // Let Pk be ! ToString(k).
+            ObjectPropertyName pk(state, Value(k));
+            // Let next be ? IteratorStep(iterator).
+            std::pair<Value, bool> next = iterator->iteratorNext(state);
+            // If next is false, then
+            if (next.second) {
+                // Perform ? Set(A, "length", k, true).
+                A->setThrowsException(state, ObjectPropertyName(state, state.context()->staticStrings().length), Value(k), A);
+                // Return A.
+                return A;
+            }
+            // Let nextValue be ? IteratorValue(next).
+            const Value& nextValue = next.first;
+            Value mappedValue = nextValue;
+            // Let defineStatus be CreateDataPropertyOrThrow(A, Pk, mappedValue).
+            A->defineOwnPropertyThrowsException(state, pk, ObjectPropertyDescriptor(mappedValue, ObjectPropertyDescriptor::AllPresent));
+            // Increase k by 1.
+            k++;
+        }
+    }
+    // NOTE: item is not an Iterable so assume it is an array-like object.
+    // Let arrayLike be ! ToObject(item).
+    Object* arrayLike = item.toObject(state);
+    // Let len be ? ToLength(? Get(arrayLike, "length")).
+    auto len = arrayLike->lengthES6(state);
+    // If IsConstructor(C) is true, then
+    Object* A;
+    if (C.isFunction() && C.asFunction()->isConstructor()) {
+        // Let A be ? Construct(C, « len »).
+        Value vlen(len);
+        A = C.asFunction()->newInstance(state, 1, &vlen);
+    } else {
+        // Else,
+        // Let A be ? ArrayCreate(len).
+        A = new ArrayObject(state, len);
+    }
+
+    // Let k be 0.
+    double k = 0;
+    // Repeat, while k < len
+    while (k < len) {
+        // Let Pk be ! ToString(k).
+        ObjectPropertyName Pk(state, Value(k));
+        // Let kValue be ? Get(arrayLike, Pk).
+        Value kValue = arrayLike->get(state, Pk).value(state, arrayLike);
+        // If mapping is true, then
+        Value mappedValue = kValue;
+        // Perform ? CreateDataPropertyOrThrow(A, Pk, mappedValue).
+        A->defineOwnPropertyThrowsException(state, Pk, ObjectPropertyDescriptor(mappedValue, ObjectPropertyDescriptor::AllPresent));
+        // Increase k by 1.
+        k++;
+    }
+    // Perform ? Set(A, "length", len, true).
+    A->setThrowsException(state, ObjectPropertyName(state, state.context()->staticStrings().length), Value(len), A);
+    // Return A.
+    return A;
+}
+
 void ArrayObject::convertIntoNonFastMode(ExecutionState& state)
 {
     if (!isFastModeArray())

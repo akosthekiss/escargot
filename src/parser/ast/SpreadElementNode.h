@@ -41,6 +41,16 @@ public:
         return SpreadElement;
     }
 
+    virtual void generateExpressionByteCode(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeRegisterIndex dstRegister)
+    {
+        m_arg->generateExpressionByteCode(codeBlock, context, dstRegister);
+    }
+
+    virtual void iterateChildrenIdentifier(const std::function<void(AtomicString name, bool isAssignment)>& fn)
+    {
+        m_arg->iterateChildrenIdentifier(fn);
+    }
+
 protected:
     RefPtr<Node> m_arg;
 };
