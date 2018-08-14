@@ -28,6 +28,7 @@
 namespace Escargot {
 
 class Context;
+class ByteCode;
 class ByteCodeBlock;
 class LexicalEnvironment;
 struct GetObjectInlineCache;
@@ -35,8 +36,6 @@ struct SetObjectInlineCache;
 struct EnumerateObjectData;
 class GetGlobalObject;
 class SetGlobalObject;
-class CallFunction;
-class CallFunctionWithReceiver;
 class CallFunctionInWithScope;
 class CallEvalFunction;
 class WithOperation;
@@ -50,6 +49,12 @@ class GlobalObject;
 
 class ByteCodeInterpreter {
 public:
+    enum CallKind {
+        Call,
+        CallWithReceiver,
+        New,
+    };
+
     static Value interpret(ExecutionState& state, ByteCodeBlock* byteCodeBlock, register size_t programCounter, Value* registerFile, void* initAddressFiller);
     static Value loadByName(ExecutionState& state, LexicalEnvironment* env, const AtomicString& name, bool throwException = true);
     static EnvironmentRecord* getBindedEnvironmentRecordByName(ExecutionState& state, LexicalEnvironment* env, const AtomicString& name, Value& bindedValue, bool throwException = true);
@@ -86,8 +91,7 @@ public:
     static Value withOperation(ExecutionState& state, WithOperation* code, Object* obj, ExecutionContext* ec, LexicalEnvironment* env, size_t& programCounter, ByteCodeBlock* byteCodeBlock, Value* registerFile, Value* stackStorage);
     static bool binaryInOperation(ExecutionState& state, const Value& left, const Value& right);
 
-    static void callFunctionWithSpreadArgument(ExecutionState& state, CallFunction* code, Value* registerFile);
-    static void callFunctionWithReceiverAndSpreadArgument(ExecutionState& state, CallFunctionWithReceiver* code, Value* registerFile);
+    static Value callWithSpreadArgument(ExecutionState& state, ByteCode* code, Value* registerFile, CallKind kind);
     static Value callFunctionInWithScope(ExecutionState& state, CallFunctionInWithScope* code, ExecutionContext* ec, LexicalEnvironment* env, Value* argv);
 
     static void declareFunctionDeclarations(ExecutionState& state, DeclareFunctionDeclarations* code, LexicalEnvironment* lexicalEnvironment, Value* stackStorage);

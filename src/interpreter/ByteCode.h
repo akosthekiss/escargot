@@ -1130,7 +1130,7 @@ struct SpreadIndexData {
 
 class CallFunction : public ByteCode {
 public:
-    CallFunction(const ByteCodeLOC& loc, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool useSpreadArgument = 0, SpreadIndexData* spreadIndexData = nullptr)
+    CallFunction(const ByteCodeLOC& loc, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool& useSpreadArgument, SpreadIndexData* spreadIndexData)
         : ByteCode(Opcode::CallFunctionOpcode, loc)
         , m_calleeIndex(calleeIndex)
         , m_argumentsStartIndex(argumentsStartIndex)
@@ -1238,12 +1238,14 @@ public:
 
 class NewOperation : public ByteCode {
 public:
-    NewOperation(const ByteCodeLOC& loc, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex)
+    NewOperation(const ByteCodeLOC& loc, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool& useSpreadArgument, SpreadIndexData* spreadIndexData)
         : ByteCode(Opcode::NewOperationOpcode, loc)
         , m_calleeIndex(calleeIndex)
         , m_argumentsStartIndex(argumentsStartIndex)
         , m_argumentCount(argumentCount)
         , m_resultIndex(resultIndex)
+        , m_useSpreadArgument(useSpreadArgument)
+        , m_spreadIndexData(spreadIndexData)
     {
     }
 
@@ -1251,6 +1253,9 @@ public:
     ByteCodeRegisterIndex m_argumentsStartIndex;
     uint16_t m_argumentCount;
     ByteCodeRegisterIndex m_resultIndex;
+    bool m_useSpreadArgument;
+    SpreadIndexData* m_spreadIndexData;
+
 #ifndef NDEBUG
     virtual void dump()
     {

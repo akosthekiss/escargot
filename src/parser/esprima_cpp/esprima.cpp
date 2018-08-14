@@ -4287,7 +4287,7 @@ public:
         if (args.size() > 65535) {
             this->throwError("too many arguments in new");
         }
-        expr = new NewExpressionNode(callee.get(), std::move(args));
+        expr = new NewExpressionNode(callee.get(), std::move(args), useSpreadArgument);
         this->context->isAssignmentTarget = false;
         this->context->isBindingElement = false;
         return this->finalize(node, expr);

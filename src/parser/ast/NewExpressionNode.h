@@ -28,11 +28,12 @@ namespace Escargot {
 class NewExpressionNode : public ExpressionNode {
 public:
     friend class ScriptParser;
-    NewExpressionNode(Node* callee, ArgumentVector&& arguments)
+    NewExpressionNode(Node* callee, ArgumentVector&& arguments, bool useSpreadArgument)
         : ExpressionNode()
     {
         m_callee = callee;
         m_arguments = arguments;
+        m_useSpreadArgument = useSpreadArgument;
     }
 
     virtual ~NewExpressionNode()
@@ -40,7 +41,7 @@ public:
     }
 
     virtual ASTNodeType type() { return ASTNodeType::NewExpression; }
-    ByteCodeRegisterIndex generateArguments(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, bool clearInCallingExpressionScope = true)
+    ByteCodeRegisterIndex generateArguments(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, SpreadIndexData*& spreadIndexData, bool clearInCallingExpressionScope = true)
     {
         ByteCodeRegisterIndex ret = context->getRegister();
         context->giveUpRegister();
@@ -68,6 +69,13 @@ public:
                 for (size_t i = 0; i < m_arguments.size(); i++) {
                     regs[i] = m_arguments[i]->getRegister(codeBlock, context);
                     m_arguments[i]->generateExpressionByteCode(codeBlock, context, regs[i]);
+                    if (UNLIKELY(m_useSpreadArgument && m_arguments[i]->type() == SpreadElement)) {
+                        if (!spreadIndexData) {
+                            spreadIndexData = new SpreadIndexData();
+                            codeBlock->m_literalData.pushBack(spreadIndexData);
+                        }
+                        spreadIndexData->m_spreadIndex.push_back(static_cast<uint16_t>(i));
+                    }
                 }
                 for (size_t i = 0; i < m_arguments.size(); i++) {
                     context->giveUpRegister();
@@ -79,6 +87,13 @@ public:
         for (size_t i = 0; i < m_arguments.size(); i++) {
             size_t registerExpect = context->getRegister();
             m_arguments[i]->generateExpressionByteCode(codeBlock, context, registerExpect);
+            if (UNLIKELY(m_useSpreadArgument && m_arguments[i]->type() == SpreadElement)) {
+                if (!spreadIndexData) {
+                    spreadIndexData = new SpreadIndexData();
+                    codeBlock->m_literalData.pushBack(spreadIndexData);
+                }
+                spreadIndexData->m_spreadIndex.push_back(static_cast<uint16_t>(i));
+            }
         }
 
         for (size_t i = 0; i < m_arguments.size(); i++) {
@@ -87,6 +102,7 @@ public:
 
         return ret;
     }
+
     virtual void generateExpressionByteCode(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeRegisterIndex dstRegister)
     {
         bool isSlow = !CallExpressionNode::canUseDirectRegister(context, m_callee.get(), m_arguments);
@@ -98,12 +114,13 @@ public:
         size_t callee = m_callee->getRegister(codeBlock, context);
         m_callee->generateExpressionByteCode(codeBlock, context, callee);
 
-        size_t argumentsStartIndex = generateArguments(codeBlock, context);
+        SpreadIndexData* spreadIndexData = nullptr;
+        size_t argumentsStartIndex = generateArguments(codeBlock, context, spreadIndexData);
 
         // give up callee index
         context->giveUpRegister();
 
-        codeBlock->pushCode(NewOperation(ByteCodeLOC(m_loc.index), callee, argumentsStartIndex, m_arguments.size(), dstRegister), context, this);
+        codeBlock->pushCode(NewOperation(ByteCodeLOC(m_loc.index), callee, argumentsStartIndex, m_arguments.size(), dstRegister, m_useSpreadArgument, spreadIndexData), context, this);
 
         codeBlock->m_shouldClearStack = true;
 
@@ -121,6 +138,7 @@ public:
 protected:
     RefPtr<Node> m_callee;
     ArgumentVector m_arguments;
+    bool m_useSpreadArgument;
 };
 }
 

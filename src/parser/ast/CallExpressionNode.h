@@ -31,11 +31,11 @@ public:
     friend class ScriptParser;
     CallExpressionNode(Node* callee, ArgumentVector&& arguments, bool useSuper = false, bool useSpreadArgument = false)
         : ExpressionNode()
-        , m_callee(callee)
-        , m_arguments(arguments)
-        , m_useSuper(useSuper)
-        , m_useSpreadArgument(useSpreadArgument)
     {
+        m_callee = callee;
+        m_arguments = arguments;
+        m_useSuper = useSuper;
+        m_useSpreadArgument = useSpreadArgument;
     }
 
     virtual ~CallExpressionNode()
