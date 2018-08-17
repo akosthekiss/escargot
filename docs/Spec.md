@@ -8,7 +8,7 @@ ES5 specification is fully supported with Escargot.
 
 ## ES6
 
-### supported
+### supported objects
 | Object type | Implemented Feature | Property Type | Note |
 | -------- | ---- | ------------------- | ---- |
 | [TypedArray Objects](http://www.ecma-international.org/ecma-262/6.0/#sec-typedarray-objects) | TypedArray () | constructor | Currently it works expectedly only with arraylength less than 210000000 |
@@ -44,7 +44,40 @@ ES5 specification is fully supported with Escargot.
 | | Promise.resolve (x) | function | |
 | | Promise.prototype.catch (onRejected) | method | |
 | | Promise.prototype.then (onFulfilled, onRejected) | method | |
+| [Math Objects](http://www.ecma-international.org/ecma-262/6.0/#sec-math) | math function properties | function | fully supported math functions |
+ 
 
+### supported features
+(Referenced on http://kangax.github.io/compat-table/es6/)
+
+| Feature type | Implemented Feature | Note |
+| -------- | ---- | ---- |
+| [For-Of Statement](http://www.ecma-international.org/ecma-262/6.0/#sec-for-in-and-for-of-statements) | with arrays | |
+| | with sparse arrays | |
+| | with strings | |
+| | with instances of generic iterables | |
+| [Class](http://www.ecma-international.org/ecma-262/6.0/#sec-class-definitions) | class statement | |
+| | class expression | |
+| | anonymouse class | |
+| | constructor | |
+| | prototype methods | |
+| | string-keyed methods | |
+| | optional semicolons | |
+| | static methods | |
+| | accessor properties | |
+| | static accessor properties | |
+| | methods aren't enumerable | |
+| | implicit strict mode | |
+| | constructor requires new | |
+| | extends | |
+| | extends expressions | |
+| | extends null | |
+| [Super](http://www.ecma-international.org/ecma-262/6.0/#sec-super-keyword) | statement in constructors | |
+| | expression in constructors | |
+| | in methods, property access | |
+| | in methods, method calls | |
+| | method calls use correct "this" binding | |
+| | super() invokes the correct constructor | |
 
 ## Etc.
 Even though the features below are not included in ES5 or ES6 specification, Escargot supports them for your usability.
