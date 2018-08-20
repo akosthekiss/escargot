@@ -3548,6 +3548,7 @@ public:
         this->expect(LeftSquareBracket);
         MetaNode node = this->createNode();
 
+        bool useSpreadElement = false;
         while (!this->match(RightSquareBracket)) {
             if (this->match(Comma)) {
                 this->nextToken();
@@ -3560,6 +3561,7 @@ public:
                     this->expect(Comma);
                 }
                 elements.push_back(element);
+                useSpreadElement = true;
             } else {
                 elements.push_back(this->inheritCoverGrammar(&Parser::parseAssignmentExpression));
                 if (!this->match(RightSquareBracket)) {
@@ -3568,8 +3570,7 @@ public:
             }
         }
         this->expect(RightSquareBracket);
-
-        return this->finalize(node, new ArrayExpressionNode(std::move(elements)));
+        return this->finalize(node, new ArrayExpressionNode(std::move(elements), useSpreadElement));
     }
 
     // ECMA-262 12.2.6 Object Initializer
@@ -4458,7 +4459,7 @@ public:
             arrayExpressionForRaw = this->finalize(node, new ArrayExpressionNode(std::move(elements)));
         }
 
-        RefPtr<ArrayExpressionNode> quasiVector = this->finalize(node, new ArrayExpressionNode(std::move(elements), this->escargotContext->staticStrings().raw, arrayExpressionForRaw.get()));
+        RefPtr<ArrayExpressionNode> quasiVector = this->finalize(node, new ArrayExpressionNode(std::move(elements), false, this->escargotContext->staticStrings().raw, arrayExpressionForRaw.get()));
         args.push_back(quasiVector.get());
         for (size_t i = 0; i < templateLiteral->expressions().size(); i++) {
             args.push_back(templateLiteral->expressions()[i]);

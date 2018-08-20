@@ -163,6 +163,17 @@ struct ByteCodeLOC {
     }
 };
 
+struct ByteCodeIndexData {
+    std::vector<ByteCodeRegisterIndex> m_indices;
+
+    ByteCodeIndexData()
+    {
+    }
+
+    void* operator new(size_t size);
+    void* operator new[](size_t size) = delete;
+};
+
 class ByteCode : public gc {
 public:
     virtual ~ByteCode() {}
@@ -545,18 +556,23 @@ public:
 
 class ArrayDefineOwnPropertyOperation : public ByteCode {
 public:
-    ArrayDefineOwnPropertyOperation(const ByteCodeLOC& loc, const size_t& objectRegisterIndex, const uint32_t& baseIndex, uint8_t count)
+    ArrayDefineOwnPropertyOperation(const ByteCodeLOC& loc, const size_t& objectRegisterIndex, const bool& useSpreadElement, const uint8_t& count, const uint8_t& spreadCount, const uint32_t& baseIndex)
         : ByteCode(Opcode::ArrayDefineOwnPropertyOperationOpcode, loc)
         , m_objectRegisterIndex(objectRegisterIndex)
+        , m_useSpreadElement(useSpreadElement)
         , m_count(count)
+        , m_spreadCount(spreadCount)
         , m_baseIndex(baseIndex)
     {
     }
 
     ByteCodeRegisterIndex m_objectRegisterIndex;
+    bool m_useSpreadElement;
     uint8_t m_count;
+    uint8_t m_spreadCount;
     uint32_t m_baseIndex;
     ByteCodeRegisterIndex m_loadRegisterIndexs[ARRAY_DEFINE_OPERATION_MERGE_COUNT];
+    uint8_t m_spreadIndexs[ARRAY_DEFINE_OPERATION_MERGE_COUNT];
 
 #ifndef NDEBUG
     virtual void dump()
@@ -1117,20 +1133,9 @@ public:
 #endif
 };
 
-struct SpreadIndexData {
-    std::vector<uint16_t> m_spreadIndex;
-
-    SpreadIndexData()
-    {
-    }
-
-    void* operator new(size_t size);
-    void* operator new[](size_t size) = delete;
-};
-
 class CallFunction : public ByteCode {
 public:
-    CallFunction(const ByteCodeLOC& loc, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool& useSpreadArgument, SpreadIndexData* spreadIndexData)
+    CallFunction(const ByteCodeLOC& loc, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool& useSpreadArgument, ByteCodeIndexData* spreadIndexData)
         : ByteCode(Opcode::CallFunctionOpcode, loc)
         , m_calleeIndex(calleeIndex)
         , m_argumentsStartIndex(argumentsStartIndex)
@@ -1145,7 +1150,7 @@ public:
     uint16_t m_argumentCount;
     ByteCodeRegisterIndex m_resultIndex;
     bool m_useSpreadArgument : 1;
-    SpreadIndexData* m_spreadIndexData;
+    ByteCodeIndexData* m_spreadIndexData;
 
 #ifndef NDEBUG
     virtual void dump()
@@ -1157,7 +1162,7 @@ public:
 
 class CallFunctionWithReceiver : public ByteCode {
 public:
-    CallFunctionWithReceiver(const ByteCodeLOC& loc, const size_t& receiverIndex, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool callSuper = false, const bool useSpreadArgument = false, SpreadIndexData* spreadIndexData = nullptr)
+    CallFunctionWithReceiver(const ByteCodeLOC& loc, const size_t& receiverIndex, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool callSuper = false, const bool useSpreadArgument = false, ByteCodeIndexData* spreadIndexData = nullptr)
         : ByteCode(Opcode::CallFunctionWithReceiverOpcode, loc)
         , m_receiverIndex(receiverIndex)
         , m_calleeIndex(calleeIndex)
@@ -1177,7 +1182,7 @@ public:
     ByteCodeRegisterIndex m_resultIndex;
     bool m_callSuper : 1;
     bool m_useSpreadArgument : 1;
-    SpreadIndexData* m_spreadIndexData;
+    ByteCodeIndexData* m_spreadIndexData;
 
 #ifndef NDEBUG
     virtual void dump()
@@ -1238,7 +1243,7 @@ public:
 
 class NewOperation : public ByteCode {
 public:
-    NewOperation(const ByteCodeLOC& loc, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool& useSpreadArgument, SpreadIndexData* spreadIndexData)
+    NewOperation(const ByteCodeLOC& loc, const size_t& calleeIndex, const size_t& argumentsStartIndex, const size_t& argumentCount, const size_t& resultIndex, const bool& useSpreadArgument, ByteCodeIndexData* spreadIndexData)
         : ByteCode(Opcode::NewOperationOpcode, loc)
         , m_calleeIndex(calleeIndex)
         , m_argumentsStartIndex(argumentsStartIndex)
@@ -1254,7 +1259,7 @@ public:
     uint16_t m_argumentCount;
     ByteCodeRegisterIndex m_resultIndex;
     bool m_useSpreadArgument;
-    SpreadIndexData* m_spreadIndexData;
+    ByteCodeIndexData* m_spreadIndexData;
 
 #ifndef NDEBUG
     virtual void dump()

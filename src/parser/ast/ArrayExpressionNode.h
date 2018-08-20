@@ -27,10 +27,11 @@ namespace Escargot {
 class ArrayExpressionNode : public ExpressionNode {
 public:
     friend class ScriptParser;
-    ArrayExpressionNode(ExpressionNodeVector&& elements, AtomicString additionalPropertyName = AtomicString(), Node* additionalPropertyExpression = nullptr)
+    ArrayExpressionNode(ExpressionNodeVector&& elements, bool useSpreadElement = false, AtomicString additionalPropertyName = AtomicString(), Node* additionalPropertyExpression = nullptr)
         : ExpressionNode()
     {
         m_elements = elements;
+        m_useSpreadElement = useSpreadElement;
         m_additionalPropertyName = additionalPropertyName;
         m_additionalPropertyExpression = additionalPropertyExpression;
     }
@@ -43,35 +44,47 @@ public:
     virtual void generateExpressionByteCode(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeRegisterIndex dstRegister)
     {
         size_t arrayIndex = codeBlock->currentCodeSize();
-        size_t arrLen = 0;
         codeBlock->pushCode(CreateArray(ByteCodeLOC(m_loc.index), dstRegister), context, this);
+
+        size_t arrLen = 0;
         size_t objIndex = dstRegister;
         for (size_t i = 0; i < m_elements.size(); i += ARRAY_DEFINE_OPERATION_MERGE_COUNT) {
             size_t fillCount = 0;
             size_t regCount = 0;
+            size_t spreadCount = 0;
             ByteCodeRegisterIndex regs[ARRAY_DEFINE_OPERATION_MERGE_COUNT];
+            uint8_t spreadIndexs[ARRAY_DEFINE_OPERATION_MERGE_COUNT];
             for (size_t j = 0; j < ARRAY_DEFINE_OPERATION_MERGE_COUNT && ((i + j) < m_elements.size()); j++) {
                 arrLen = j + i + 1;
-
                 ByteCodeRegisterIndex valueIndex = std::numeric_limits<ByteCodeRegisterIndex>::max();
                 if (m_elements[i + j]) {
                     valueIndex = m_elements[i + j]->getRegister(codeBlock, context);
                     m_elements[i + j]->generateExpressionByteCode(codeBlock, context, valueIndex);
+                    if (UNLIKELY(m_useSpreadElement && m_elements[i + j]->type() == SpreadElement)) {
+                        spreadIndexs[spreadCount] = j;
+                        spreadCount++;
+                    }
                     regCount++;
                 }
                 fillCount++;
                 regs[j] = valueIndex;
             }
-            codeBlock->pushCode(ArrayDefineOwnPropertyOperation(ByteCodeLOC(m_loc.index), objIndex, i, fillCount), context, this);
+            codeBlock->pushCode(ArrayDefineOwnPropertyOperation(ByteCodeLOC(m_loc.index), objIndex, m_useSpreadElement, fillCount, spreadCount, i), context, this);
             memcpy(codeBlock->peekCode<ArrayDefineOwnPropertyOperation>(codeBlock->lastCodePosition<ArrayDefineOwnPropertyOperation>())->m_loadRegisterIndexs,
                    regs, sizeof(regs));
+            if (UNLIKELY(m_useSpreadElement)) {
+                memcpy(codeBlock->peekCode<ArrayDefineOwnPropertyOperation>(codeBlock->lastCodePosition<ArrayDefineOwnPropertyOperation>())->m_spreadIndexs,
+                       spreadIndexs, sizeof(spreadIndexs));
+            }
             for (size_t j = 0; j < regCount; j++) {
                 // drop value register
                 context->giveUpRegister();
             }
         }
-        codeBlock->peekCode<CreateArray>(arrayIndex)->m_length = arrLen;
 
+        if (LIKELY(!m_useSpreadElement)) {
+            codeBlock->peekCode<CreateArray>(arrayIndex)->m_length = arrLen;
+        }
         codeBlock->m_shouldClearStack = true;
 
         if (m_additionalPropertyExpression) {
@@ -95,6 +108,7 @@ public:
 
 protected:
     ExpressionNodeVector m_elements;
+    bool m_useSpreadElement;
     AtomicString m_additionalPropertyName;
     RefPtr<Node> m_additionalPropertyExpression;
 };

@@ -44,7 +44,7 @@ public:
 
     Node* callee() { return m_callee.get(); }
     virtual ASTNodeType type() { return ASTNodeType::CallExpression; }
-    ByteCodeRegisterIndex generateArguments(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, SpreadIndexData*& spreadIndexData, bool clearInCallingExpressionScope = true)
+    ByteCodeRegisterIndex generateArguments(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeIndexData*& spreadIndexData, bool clearInCallingExpressionScope = true)
     {
         context->m_inCallingExpressionScope = !clearInCallingExpressionScope;
 
@@ -86,11 +86,11 @@ public:
                     regs[i] = m_arguments[i]->getRegister(codeBlock, context);
                     m_arguments[i]->generateExpressionByteCode(codeBlock, context, regs[i]);
                     if (UNLIKELY(m_useSpreadArgument && m_arguments[i]->type() == SpreadElement)) {
-                        if (!spreadIndexData) {
-                            spreadIndexData = new SpreadIndexData();
+                        if (UNLIKELY(!spreadIndexData)) {
+                            spreadIndexData = new ByteCodeIndexData();
                             codeBlock->m_literalData.pushBack(spreadIndexData);
                         }
-                        spreadIndexData->m_spreadIndex.push_back(static_cast<uint16_t>(i + addIndex));
+                        spreadIndexData->m_indices.push_back(static_cast<uint16_t>(i + addIndex));
                     }
                 }
 
@@ -112,11 +112,11 @@ public:
             size_t registerExpect = context->getRegister();
             m_arguments[i]->generateExpressionByteCode(codeBlock, context, registerExpect);
             if (UNLIKELY(m_useSpreadArgument && m_arguments[i]->type() == SpreadElement)) {
-                if (!spreadIndexData) {
-                    spreadIndexData = new SpreadIndexData();
+                if (UNLIKELY(!spreadIndexData)) {
+                    spreadIndexData = new ByteCodeIndexData();
                     codeBlock->m_literalData.pushBack(spreadIndexData);
                 }
-                spreadIndexData->m_spreadIndex.push_back(static_cast<uint16_t>(i + addIndex));
+                spreadIndexData->m_indices.push_back(static_cast<uint16_t>(i + addIndex));
             }
         }
 
@@ -174,7 +174,7 @@ public:
 
     virtual void generateExpressionByteCode(ByteCodeBlock* codeBlock, ByteCodeGenerateContext* context, ByteCodeRegisterIndex dstRegister)
     {
-        SpreadIndexData* spreadIndexData = nullptr;
+        ByteCodeIndexData* spreadIndexData = nullptr;
         if (m_callee->isIdentifier() && m_callee->asIdentifier()->name().string()->equals("eval")) {
             size_t evalIndex = context->getRegister();
             codeBlock->pushCode(LoadByName(ByteCodeLOC(m_loc.index), evalIndex, codeBlock->m_codeBlock->context()->staticStrings().eval), context, this);

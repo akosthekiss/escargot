@@ -749,18 +749,22 @@ Value ByteCodeInterpreter::interpret(ExecutionState& state, ByteCodeBlock* byteC
                 :
             {
                 ArrayDefineOwnPropertyOperation* code = (ArrayDefineOwnPropertyOperation*)programCounter;
-                ArrayObject* arr = registerFile[code->m_objectRegisterIndex].asObject()->asArrayObject();
-                if (LIKELY(arr->isFastModeArray())) {
-                    size_t end = code->m_count + code->m_baseIndex;
-                    for (size_t i = 0; i < code->m_count; i++) {
-                        if (LIKELY(code->m_loadRegisterIndexs[i] != std::numeric_limits<ByteCodeRegisterIndex>::max())) {
-                            arr->m_fastModeData[i + code->m_baseIndex] = registerFile[code->m_loadRegisterIndexs[i]];
-                        }
-                    }
+
+                if (UNLIKELY(code->m_useSpreadElement)) {
+                    arrayDefineOwnPropertyWithSpreadElementOperation(state, code, registerFile);
                 } else {
-                    for (size_t i = 0; i < code->m_count; i++) {
-                        if (LIKELY(code->m_loadRegisterIndexs[i] != std::numeric_limits<ByteCodeRegisterIndex>::max())) {
-                            arr->defineOwnProperty(state, ObjectPropertyName(state, Value(i + code->m_baseIndex)), ObjectPropertyDescriptor(registerFile[code->m_loadRegisterIndexs[i]], ObjectPropertyDescriptor::AllPresent));
+                    ArrayObject* arr = registerFile[code->m_objectRegisterIndex].asObject()->asArrayObject();
+                    if (LIKELY(arr->isFastModeArray())) {
+                        for (size_t i = 0; i < code->m_count; i++) {
+                            if (LIKELY(code->m_loadRegisterIndexs[i] != std::numeric_limits<ByteCodeRegisterIndex>::max())) {
+                                arr->m_fastModeData[i + code->m_baseIndex] = registerFile[code->m_loadRegisterIndexs[i]];
+                            }
+                        }
+                    } else {
+                        for (size_t i = 0; i < code->m_count; i++) {
+                            if (LIKELY(code->m_loadRegisterIndexs[i] != std::numeric_limits<ByteCodeRegisterIndex>::max())) {
+                                arr->defineOwnProperty(state, ObjectPropertyName(state, Value(i + code->m_baseIndex)), ObjectPropertyDescriptor(registerFile[code->m_loadRegisterIndexs[i]], ObjectPropertyDescriptor::AllPresent));
+                            }
                         }
                     }
                 }
@@ -2039,7 +2043,7 @@ NEVER_INLINE Value ByteCodeInterpreter::callWithSpreadArgument(ExecutionState& s
     Value callee;
     size_t argumentCount;
     size_t argumentsStartIndex;
-    SpreadIndexData* spreadIndexData;
+    ByteCodeIndexData* spreadIndexData;
 
     switch (kind) {
     case Call: {
@@ -2072,13 +2076,14 @@ NEVER_INLINE Value ByteCodeInterpreter::callWithSpreadArgument(ExecutionState& s
 
     size_t arglen = 0;
     Value* arguments = nullptr;
-    std::vector<uint16_t>& spreadArgumentIndex = spreadIndexData->m_spreadIndex;
+    std::vector<uint16_t>& spreadArgumentIndex = spreadIndexData->m_indices;
     std::vector<Value, GCUtil::gc_malloc_ignore_off_page_allocator<Value>> spreadArguments;
     Value thisArray = state.context()->globalObject()->array();
 
     for (size_t i = 0; i < argumentCount; i++) {
         if (std::find(spreadArgumentIndex.begin(), spreadArgumentIndex.end(), static_cast<uint16_t>(i)) != spreadArgumentIndex.end()) {
-            Value spreadElement = ArrayObject::arrayFrom(state, thisArray, registerFile[argumentsStartIndex + i]);
+            Value v = registerFile[argumentsStartIndex + i];
+            Value spreadElement = ArrayObject::arrayFrom(state, thisArray, v);
 
             ASSERT(spreadElement.isObject() && spreadElement.asObject()->isArrayObject());
 
@@ -2203,6 +2208,60 @@ NEVER_INLINE void ByteCodeInterpreter::defineObjectSetter(ExecutionState& state,
     JSGetterSetter gs(Value(Value::EmptyValue), registerFile[code->m_objectPropertyValueRegisterIndex].asFunction());
     ObjectPropertyDescriptor desc(gs, (ObjectPropertyDescriptor::PresentAttribute)(ObjectPropertyDescriptor::ConfigurablePresent | ObjectPropertyDescriptor::EnumerablePresent));
     registerFile[code->m_objectRegisterIndex].toObject(state)->defineOwnPropertyThrowsExceptionWhenStrictMode(state, ObjectPropertyName(state, pName), desc);
+}
+
+NEVER_INLINE void ByteCodeInterpreter::arrayDefineOwnPropertyWithSpreadElementOperation(ExecutionState& state, ArrayDefineOwnPropertyOperation* code, Value* registerFile)
+{
+    ArrayObject* arr = registerFile[code->m_objectRegisterIndex].asObject()->asArrayObject();
+    size_t prevArrayLength = arr->getArrayLength(state);
+
+    Value spreadElements[ARRAY_DEFINE_OPERATION_MERGE_COUNT];
+    Value thisArray = state.context()->globalObject()->array();
+
+    size_t elementLen = code->m_count - code->m_spreadCount;
+    for (size_t i = 0; i < code->m_spreadCount; i++) {
+        ByteCodeRegisterIndex regIndex = code->m_loadRegisterIndexs[code->m_spreadIndexs[i]];
+        ASSERT(regIndex != std::numeric_limits<ByteCodeRegisterIndex>::max());
+
+        Value v = registerFile[regIndex];
+        Value spreadElement = ArrayObject::arrayFrom(state, thisArray, v);
+
+        ASSERT(spreadElement.isObject() && spreadElement.asObject()->isArrayObject());
+
+        spreadElements[i] = spreadElement;
+        elementLen += static_cast<size_t>(spreadElement.asObject()->asArrayObject()->length(state));
+    }
+
+    arr->setArrayLength(state, prevArrayLength + elementLen);
+    size_t elementIndex = 0, spreadIndex = 0;
+    for (size_t i = 0; i < code->m_count; i++) {
+        if (spreadIndex < code->m_spreadCount && i == code->m_spreadIndexs[spreadIndex]) {
+            ArrayObject* spreadElement = spreadElements[spreadIndex].asObject()->asArrayObject();
+            for (size_t j = 0; j < static_cast<size_t>(spreadElement->length(state)); j++) {
+                ASSERT(elementIndex < elementLen);
+                Value element = spreadElement->getIndexedProperty(state, Value(j)).value(state, spreadElement);
+                if (LIKELY(arr->isFastModeArray())) {
+                    arr->m_fastModeData[prevArrayLength + elementIndex] = element;
+                } else {
+                    arr->defineOwnProperty(state, ObjectPropertyName(state, Value(prevArrayLength + elementIndex)), ObjectPropertyDescriptor(element, ObjectPropertyDescriptor::AllPresent));
+                }
+                elementIndex++;
+            }
+            spreadIndex++;
+        } else {
+            ASSERT(elementIndex < elementLen);
+            if (LIKELY(arr->isFastModeArray())) {
+                if (LIKELY(code->m_loadRegisterIndexs[i] != std::numeric_limits<ByteCodeRegisterIndex>::max())) {
+                    arr->m_fastModeData[prevArrayLength + elementIndex] = registerFile[code->m_loadRegisterIndexs[i]];
+                }
+            } else {
+                if (LIKELY(code->m_loadRegisterIndexs[i] != std::numeric_limits<ByteCodeRegisterIndex>::max())) {
+                    arr->defineOwnProperty(state, ObjectPropertyName(state, Value(prevArrayLength + elementIndex)), ObjectPropertyDescriptor(registerFile[code->m_loadRegisterIndexs[i]], ObjectPropertyDescriptor::AllPresent));
+                }
+            }
+            elementIndex++;
+        }
+    }
 }
 
 NEVER_INLINE void ByteCodeInterpreter::processException(ExecutionState& state, const Value& value, ExecutionContext* ecInput, size_t programCounter)
