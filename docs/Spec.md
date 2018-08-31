@@ -54,10 +54,37 @@ ES5 specification is fully supported with Escargot.
 
 | Feature type | Implemented Feature | Note |
 | -------- | ---- | ---- |
+| [Rest Parameters](http://www.ecma-international.org/ecma-262/6.0/#sec-function-definitions) | basic functionality | |
+| | function length property | |
+| | arguments ogbject interaction | |
+| | can't be used in setters | |
+| | new Funciton() support | |
+| [Spread Syntax for Iterable Objects](http://www.ecma-international.org/ecma-262/6.0/#sec-argument-lists-runtime-semantics-argumentlistevaluation) | with arrays, in function calls | |
+| | with arrays, in array literals | |
+| | with sparse arrays, in function calls | |
+| | with sparse arrays, in array literals | |
+| | with strings, in function calls | |
+| | with strings, in array literals | |
+| | with astral plane strings, in function calls | |
+| | with astral plane strings, in array literals | |
+| | with generic iterables, in calls | |
+| | with generic iterables, in arrays | |
+| | with instances of iterables, in calls | |
+| | with instances of iterables, in arrays | |
+| | spreading non-iterables is a runtime error | |
 | [For-Of Statement](http://www.ecma-international.org/ecma-262/6.0/#sec-for-in-and-for-of-statements) | with arrays | |
 | | with sparse arrays | |
 | | with strings | |
 | | with instances of generic iterables | |
+| [Arrow Functions](http://www.ecma-international.org/ecma-262/6.0/#sec-arrow-function-definitions) | 0 parameters | |
+| | 1 parameter, no brackets | |
+| | multiple parameters | |
+| | lexical this binding | |
+| | this unchanged by call or apply | |
+| | can't be bound, can be curried | |
+| | lexical arguments binding | |
+| | no line break between params and => | |
+| | correct precedence | |
 | [Class](http://www.ecma-international.org/ecma-262/6.0/#sec-class-definitions) | class statement | |
 | | class expression | |
 | | anonymouse class | |
