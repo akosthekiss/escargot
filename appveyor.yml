@@ -1,0 +1,27 @@
+version: "{build}"
+branches:
+  except:
+  - gh_pages
+skip_tags: true
+
+# Build matrix setup.
+image:
+  - Visual Studio 2017
+configuration:
+  - Debug
+#  - DebugShell
+  - Release
+#  - ReleaseShell
+platform:
+  - x64
+  - Win32
+
+# Steps of a job.
+install:
+  - git submodule update --init third_party
+
+build:
+  project: build\windows\escargot\escargot.sln
+#  parallel: true
+  verbosity: detailed
+#  verbosity: minimal

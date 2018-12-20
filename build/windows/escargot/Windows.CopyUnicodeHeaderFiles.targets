@@ -14,7 +14,7 @@
 
     <!-- This is the location of the common output folder. -->
 
-    <CopyDestionationPath>$(SolutionDir)\..\..\..\third_party\icu\include\unicode</CopyDestionationPath>
+    <CopyDestionationPath>$(SolutionDir)\..\..\..\third_party\windows\icu\include\unicode</CopyDestionationPath>
 
     <BuildDependsOn>
 
