@@ -323,7 +323,7 @@ def main():
     for suite in args.suite:
         print(COLOR_PURPLE + 'running test suite: ' + suite + COLOR_RESET)
         try:
-            RUNNERS[suite](args.engine, args.arch)
+            RUNNERS[suite](abspath(args.engine), args.arch)
             success += [suite]
         except Exception as e:
             print('\n'.join(COLOR_YELLOW + line + COLOR_RESET for line in traceback.format_exc().splitlines()))
