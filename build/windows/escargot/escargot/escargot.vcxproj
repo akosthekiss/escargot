@@ -467,36 +467,36 @@
     <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\data\makedata.vcxproj">
       <Project>{d9df7f2f-93b7-4810-b5cd-96f4f33c079b}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\extra\uconv\uconv.vcxproj">
+    <!--<ProjectReference Include="..\..\..\..\third_party\windows\icu\source\extra\uconv\uconv.vcxproj">
       <Project>{dba4088d-f6f9-4f8f-8820-082a4765c16c}</Project>
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\i18n\i18n.vcxproj">
       <Project>{0178b127-6269-407d-b112-93877bb62776}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\io\io.vcxproj">
       <Project>{c2b04507-2521-4801-bf0d-5fd79d6d518c}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\samples\cal\cal.vcxproj">
+    <!--<ProjectReference Include="..\..\..\..\third_party\windows\icu\source\samples\cal\cal.vcxproj">
       <Project>{f7659d77-09cf-4fe9-acee-927287aa9509}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\samples\date\date.vcxproj">
+    </ProjectReference>-->
+    <!--<ProjectReference Include="..\..\..\..\third_party\windows\icu\source\samples\date\date.vcxproj">
       <Project>{38b5751a-c6f9-4409-950c-f4f9da17275f}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\stubdata\stubdata.vcxproj">
+    </ProjectReference>-->
+    <!--<ProjectReference Include="..\..\..\..\third_party\windows\icu\source\stubdata\stubdata.vcxproj">
       <Project>{203ec78a-0531-43f0-a636-285439bde025}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\test\cintltst\cintltst.vcxproj">
+    </ProjectReference>-->
+    <!--<ProjectReference Include="..\..\..\..\third_party\windows\icu\source\test\cintltst\cintltst.vcxproj">
       <Project>{3d1246ae-1b32-479b-beca-aefa97be2321}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\test\intltest\intltest.vcxproj">
+    </ProjectReference>-->
+    <!--<ProjectReference Include="..\..\..\..\third_party\windows\icu\source\test\intltest\intltest.vcxproj">
       <Project>{73632960-b3a6-464d-83a3-4b43365f19b8}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\test\iotest\iotest.vcxproj">
+    </ProjectReference>-->
+    <!--<ProjectReference Include="..\..\..\..\third_party\windows\icu\source\test\iotest\iotest.vcxproj">
       <Project>{e4993e82-d68a-46ca-bae0-9d35e172e46f}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\tools\ctestfw\ctestfw.vcxproj">
+    </ProjectReference>-->
+    <!--<ProjectReference Include="..\..\..\..\third_party\windows\icu\source\tools\ctestfw\ctestfw.vcxproj">
       <Project>{eca6b435-b4fa-4f9f-bf95-f451d078fc47}</Project>
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\tools\genbrk\genbrk.vcxproj">
       <Project>{c2be5000-7501-4e87-9724-b8d82494fae6}</Project>
     </ProjectReference>
@@ -527,9 +527,9 @@
     <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\tools\gensprep\gensprep.vcxproj">
       <Project>{631c23ce-6c1d-4875-88f0-85e0a42b36ea}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\tools\gentest\gentest.vcxproj">
+    <!--<ProjectReference Include="..\..\..\..\third_party\windows\icu\source\tools\gentest\gentest.vcxproj">
       <Project>{77c78066-746f-4ea6-b3fe-b8c8a4a97891}</Project>
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\..\..\..\third_party\windows\icu\source\tools\icuinfo\icuinfo.vcxproj">
       <Project>{e7611f49-f088-4175-9446-6111444e72c8}</Project>
     </ProjectReference>
