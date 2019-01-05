@@ -1,0 +1,31 @@
+version: "{build}"
+branches:
+  except:
+    - gh_pages
+skip_tags: true
+
+# Build matrix setup.
+image:
+  - Visual Studio 2017
+configuration:
+  - Debug
+  - Release
+platform:
+  - x64
+  - Win32
+
+# Steps of a job.
+init:
+  - cmake -version
+install:
+  - git submodule update --init third_party
+  - vcpkg install icu:x86-windows
+  - vcpkg install icu:x64-windows
+before_build:
+  - if "%PLATFORM%"=="Win32" cmake -H. -Bout -DESCARGOT_HOST=linux -DESCARGOT_ARCH=x86 -DESCARGOT_MODE=release -DESCARGOT_OUTPUT=bin -G"Visual Studio 15 2017"       -DCMAKE_TOOLCHAIN_FILE=c:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake
+  - if "%PLATFORM%"=="x64"   cmake -H. -Bout -DESCARGOT_HOST=linux -DESCARGOT_ARCH=x64 -DESCARGOT_MODE=release -DESCARGOT_OUTPUT=bin -G"Visual Studio 15 2017 Win64" -DCMAKE_TOOLCHAIN_FILE=c:/tools/vcpkg/scripts/buildsystems/vcpkg.cmake
+build:
+  project: out\ESCARGOT.sln
+#  parallel: true
+  verbosity: detailed
+#  verbosity: minimal
